@@ -64,7 +64,7 @@
 			"complexity": {
 				"noThisInStatic": "error",
 				"noUselessCatch": "warn",
-				"noBannedTypes": "warn",
+				"noBannedTypes": "off",
 				"noEmptyTypeParameters": "warn",
 				"noStaticOnlyClass": "error",
 				"noUselessConstructor": "warn",
@@ -148,6 +148,9 @@
 		}
 	},
 	"files": {
-		"includes": ["**", "!**/dist"]
+		"includes": [
+			"**",
+			"!**/dist"
+		]
 	}
 }

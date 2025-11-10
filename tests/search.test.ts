@@ -35,6 +35,16 @@ describe("search", () => {
 		expect(result.data[0].name).toContain("Alice");
 	});
 
+	it("should highlight search by text query", async () => {
+		const result = await collection.searchDocuments({
+			search: "Alice",
+			highlight: true,
+		});
+
+		expect(result.count).toBeGreaterThan(0);
+		expect(result.data[0].name).toContain("<mark>Alice</mark>");
+	});
+
 	it("should search with empty query", async () => {
 		const result = await collection.searchDocuments({});
 

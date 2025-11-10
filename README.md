@@ -38,6 +38,12 @@ export const UsersCollection = new TSense("users", {
 			type: "string",
 			sort: true,
 		},
+		company: {
+			type: "string",
+			override: {} as "netflix" | "google",
+			facet: true,
+			optional: true,
+		},
 		work_history: {
 			// object and object[] auto-infers enable_nested_fields
 			type: "object[]",
@@ -91,4 +97,29 @@ const results = await UsersCollection.searchDocuments({
 		],
 	},
 });
+
+/*
+   typed as
+   count: number;
+   data: {
+        id?: string | undefined;
+        phone?: string | null | undefined;
+        ...
+	}[];
+   facet: {
+        netflix: number;
+        google: number;
+		// enabled by enable_facet_total
+        total: number;
+    };
+ */
+const faceted = await UsersCollection.searchDocuments(
+	{
+		search: "john",
+	},
+	{
+		facet_by: "company",
+		enable_facet_total: true,
+	},
+);
 ```

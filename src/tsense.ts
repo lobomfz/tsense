@@ -5,6 +5,7 @@ import type {
 	Filters,
 	InferCollectionTypes,
 } from "./types/core.js";
+import type { Simplify } from "./types/helpers.js";
 
 const requiresNested = ["object", "object[]"];
 
@@ -197,9 +198,33 @@ export class TSense<
 		return this;
 	}
 
-	async searchDocuments(data: Filters<Inferred>): Promise<{
+	async searchDocuments<
+		FacetBy extends keyof Inferred,
+		EnableFacetTotal extends boolean | undefined = undefined,
+	>(
+		data: Filters<Inferred>,
+		facet?: {
+			facet_by?: FacetBy;
+			enable_facet_total?: EnableFacetTotal;
+		},
+	): Promise<{
 		count: number;
 		data: Inferred[];
+		facet: FacetBy extends keyof Inferred
+			? Simplify<
+					Record<
+						NonNullable<Inferred[FacetBy]> extends string
+							? NonNullable<Inferred[FacetBy]>
+							: never,
+						number
+					> &
+						(EnableFacetTotal extends true
+							? {
+									total: number;
+								}
+							: {})
+				>
+			: never;
 	}> {
 		const res = await this.data.client
 			.collections(this.name)
@@ -211,19 +236,42 @@ export class TSense<
 				filter_by: this.buildFilter(data).join("&&"),
 				page: data.page,
 				limit: data.limit,
+				facet_by: facet?.facet_by as any,
 			});
+
+		const facet_result: any = facet?.facet_by
+			? facet.enable_facet_total
+				? { total: 0 }
+				: {}
+			: undefined;
+
+		if (res.facet_counts?.[0]?.counts) {
+			for (const iter of res.facet_counts[0].counts) {
+				facet_result[iter.value] = iter.count;
+
+				if (facet?.enable_facet_total) facet_result.total += iter.count;
+			}
+		}
 
 		const result = [];
 
-		if (res.hits?.length) {
-			for (const hit of res.hits) {
-				result.push(hit.document);
+		for (const hit of res.hits ?? []) {
+			if (data.highlight) {
+				for (const [key, value] of Object.entries(hit.highlight)) {
+					if (value) {
+						// @ts-expect-error
+						hit.document[key] = value.snippet;
+					}
+				}
 			}
+
+			result.push(hit.document);
 		}
 
 		return {
 			data: result as any,
 			count: res.found,
+			facet: facet_result,
 		};
 	}
 

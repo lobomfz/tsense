@@ -1,1 +1,1 @@
-export { TSense } from "./collection.js";
+export { TSense } from "./tsense.js";
