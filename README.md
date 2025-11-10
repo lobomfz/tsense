@@ -4,7 +4,7 @@ Opinionated, fully-typed typesense client
 
 # TO-DO
 - [ ] Remove base typesense dependency
-- [ ] Better filter support
+- [ ] Better filter support (includes, exact, etc...)
 - [ ] Documentation
 - [ ] Improve tests
 - [ ] Facet
@@ -72,7 +72,9 @@ const results = await UsersCollection.searchDocuments({
 	search: "john",
 	search_keys: ["name"],
 	// can sort multiple fields
-	order_by: ["age desc", "id asc"],
+	order_by: ["age desc", "name asc"],
+	// compiles into
+	// age:>=20&&((email:=@google.com)||(email:=@netflix.com))
 	filter: {
 		// min and max range on numbers
 		age: {
