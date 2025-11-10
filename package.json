@@ -1,17 +1,21 @@
 {
-	"name": "TSense",
+	"name": "tsense",
 	"version": "0.0.1",
 	"main": "dist/index.js",
 	"files": [
 		"dist"
 	],
-	"description": "Opinionated, fully typed typesense client, inspired by prisma syntax",
+	"description": "Opinionated, fully typed typesense client",
 	"license": "MIT",
 	"keywords": [
 		"typesense"
 	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"homepage": "https://github.com/lobomfz/tsense",
 	"type": "module",
+	"private": false,
 	"devDependencies": {
 		"@arethetypeswrong/cli": "^0.18.2",
 		"@biomejs/biome": "2.1.4",
