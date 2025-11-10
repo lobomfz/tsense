@@ -1,0 +1,36 @@
+{
+	"name": "TSense",
+	"version": "0.0.1",
+	"main": "dist/index.js",
+	"files": [
+		"dist"
+	],
+	"description": "Opinionated, fully typed typesense client, inspired by prisma syntax",
+	"license": "MIT",
+	"keywords": [
+		"typesense"
+	],
+	"homepage": "https://github.com/lobomfz/tsense",
+	"type": "module",
+	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.18.2",
+		"@biomejs/biome": "2.1.4",
+		"@changesets/cli": "^2.29.7",
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"typesense": "^2.1.0"
+	},
+	"scripts": {
+		"build": "tsc",
+		"ci": "bun run build && bun run format && bun run check-exports",
+		"test": "bun test",
+		"format": "biome check --write",
+		"check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
+		"local-release": "changeset version && changeset publish",
+		"prepublishOnly": "bun run ci"
+	}
+}
