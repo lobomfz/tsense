@@ -36,39 +36,37 @@ type TypesenseToTS = {
 };
 
 type ValidFieldType = keyof TypesenseToTS;
+type MaybeOptional<Field, Result> = Field extends { optional: true }
+	? Result | null | undefined
+	: Result;
 
 export type InferCollectionTypes<Fields> = Simplify<
 	{
 		id?: string;
 	} & UndefinedToOptional<{
-		[K in keyof Fields]: Fields[K] extends ValidFieldType
-			? TypesenseToTS[Fields[K]]
-			: Fields[K] extends { override: infer Override }
-				? Fields[K] extends { optional: true }
-					? Override | null | undefined
-					: Override
-				: Fields[K] extends { type: infer T }
-					? T extends ValidFieldType
-						? Fields[K] extends { optional: true }
-							? TypesenseToTS[T] | null | undefined
-							: TypesenseToTS[T]
-						: never
-					: Fields[K] extends `${infer RealType}?`
-						? RealType extends ValidFieldType
-							? TypesenseToTS[RealType] | null | undefined
+		[K in keyof Fields]: MaybeOptional<
+			Fields[K],
+			Fields[K] extends { override: infer Override }
+				? Override
+				: Fields[K] extends ValidFieldType
+					? TypesenseToTS[Fields[K]]
+					: Fields[K] extends { type: infer T }
+						? T extends ValidFieldType
+							? TypesenseToTS[T]
 							: never
-						: never;
+						: Fields[K] extends `${infer RealType}?`
+							? RealType extends ValidFieldType
+								? TypesenseToTS[RealType] | null | undefined
+								: never
+							: never
+		>;
 	}>
 >;
 
 type OrderBy<Inferred, Options = keyof Inferred | "score"> =
 	| Options
 	| Options[]
-	| (Options extends infer Q
-			? Q extends string
-				? `${Q} ${"asc" | "desc"}`
-				: never
-			: never)[];
+	| (Options extends string ? `${Options} ${"asc" | "desc"}` : never)[];
 
 type SingleFilter<Inferred> = Partial<{
 	[K in keyof Inferred]:
@@ -89,7 +87,7 @@ type RecursiveFilter<Inferred> = SingleFilter<Inferred> & {
 	OR?: RecursiveFilter<Inferred>[];
 };
 
-export type Filters<Inferred> = {
+export type SearchFilters<Inferred> = {
 	search?: string;
 	filter?: RecursiveFilter<Inferred>;
 	order_by?: OrderBy<Inferred> | undefined;
@@ -98,4 +96,24 @@ export type Filters<Inferred> = {
 	limit?: number;
 	search_keys?: (keyof Inferred)[];
 	highlight?: boolean;
+	facet_by?: NoInfer<keyof Inferred>;
+	enable_facet_total?: boolean;
 };
+
+export type InferFacetResponse<Inferred, Filter> = Filter extends {
+	facet_by: infer FacetBy;
+}
+	? FacetBy extends keyof Inferred
+		? Record<
+				NonNullable<Inferred[FacetBy]> extends string
+					? NonNullable<Inferred[FacetBy]>
+					: never,
+				number
+			> &
+				(Filter extends {
+					enable_facet_total: true;
+				}
+					? { total: number }
+					: {})
+		: never
+	: never;

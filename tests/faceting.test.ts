@@ -50,12 +50,9 @@ afterAll(async () => {
 
 describe("faceting", () => {
 	it("should return facet counts by company", async () => {
-		const result = await collection.searchDocuments(
-			{},
-			{
-				facet_by: "company",
-			},
-		);
+		const result = await collection.searchDocuments({
+			facet_by: "company",
+		});
 
 		expect(result.count).toBe(5);
 		expect(result.facet).toBeDefined();
@@ -64,13 +61,10 @@ describe("faceting", () => {
 	});
 
 	it("should return facet counts with total enabled", async () => {
-		const result = await collection.searchDocuments(
-			{},
-			{
-				facet_by: "company",
-				enable_facet_total: true,
-			},
-		);
+		const result = await collection.searchDocuments({
+			facet_by: "company",
+			enable_facet_total: true,
+		});
 
 		expect(result.count).toBe(5);
 		expect(result.facet).toBeDefined();
@@ -80,14 +74,10 @@ describe("faceting", () => {
 	});
 
 	it("should return facet counts with search query", async () => {
-		const result = await collection.searchDocuments(
-			{
-				search: "Alice",
-			},
-			{
-				facet_by: "company",
-			},
-		);
+		const result = await collection.searchDocuments({
+			search: "Alice",
+			facet_by: "company",
+		});
 
 		expect(result.count).toBeGreaterThan(0);
 		expect(result.facet).toBeDefined();
@@ -96,18 +86,14 @@ describe("faceting", () => {
 	});
 
 	it("should return facet counts with filters", async () => {
-		const result = await collection.searchDocuments(
-			{
-				filter: {
-					age: {
-						min: 30,
-					},
+		const result = await collection.searchDocuments({
+			filter: {
+				age: {
+					min: 30,
 				},
 			},
-			{
-				facet_by: "company",
-			},
-		);
+			facet_by: "company",
+		});
 
 		expect(result.count).toBe(3);
 		expect(result.facet).toBeDefined();
@@ -116,16 +102,12 @@ describe("faceting", () => {
 	});
 
 	it("should return facet counts for single company filter", async () => {
-		const result = await collection.searchDocuments(
-			{
-				filter: {
-					company: "netflix",
-				},
+		const result = await collection.searchDocuments({
+			filter: {
+				company: "netflix",
 			},
-			{
-				facet_by: "company",
-			},
-		);
+			facet_by: "company",
+		});
 
 		expect(result.count).toBe(3);
 		expect(result.facet).toBeDefined();
@@ -134,14 +116,10 @@ describe("faceting", () => {
 	});
 
 	it("should return empty facets when no results match", async () => {
-		const result = await collection.searchDocuments(
-			{
-				search: "NonExistentName",
-			},
-			{
-				facet_by: "company",
-			},
-		);
+		const result = await collection.searchDocuments({
+			search: "NonExistentName",
+			facet_by: "company",
+		});
 
 		expect(result.count).toBe(0);
 		expect(result.facet).toBeDefined();

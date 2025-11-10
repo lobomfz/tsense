@@ -113,13 +113,9 @@ const results = await UsersCollection.searchDocuments({
         total: number;
     };
  */
-const faceted = await UsersCollection.searchDocuments(
-	{
-		search: "john",
-	},
-	{
-		facet_by: "company",
-		enable_facet_total: true,
-	},
-);
+const faceted = await UsersCollection.searchDocuments({
+	search: "john",
+	facet_by: "company",
+	enable_facet_total: true,
+});
 ```

@@ -148,9 +148,6 @@
 		}
 	},
 	"files": {
-		"includes": [
-			"**",
-			"!**/dist"
-		]
+		"includes": ["**", "!**/dist"]
 	}
 }

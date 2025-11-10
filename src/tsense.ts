@@ -2,8 +2,9 @@ import type { Client } from "typesense";
 import type { CollectionFieldSchema } from "typesense/lib/Typesense/Collection.js";
 import type {
 	CustomCollectionField,
-	Filters,
+	SearchFilters,
 	InferCollectionTypes,
+	InferFacetResponse,
 } from "./types/core.js";
 import type { Simplify } from "./types/helpers.js";
 
@@ -68,7 +69,7 @@ export class TSense<
 		}
 	}
 
-	private buildSort(data: Filters<Inferred>) {
+	private buildSort(data: SearchFilters<Inferred>) {
 		if (!data.order_by) {
 			return;
 		}
@@ -99,7 +100,7 @@ export class TSense<
 		return order.join(",");
 	}
 
-	private buildFilter(data: Filters<Inferred>): string[] {
+	private buildFilter(data: SearchFilters<Inferred>): string[] {
 		const filter: string[] = [];
 
 		for (const entry of Object.entries(data.filter ?? {})) {
@@ -198,33 +199,12 @@ export class TSense<
 		return this;
 	}
 
-	async searchDocuments<
-		FacetBy extends keyof Inferred,
-		EnableFacetTotal extends boolean | undefined = undefined,
-	>(
-		data: Filters<Inferred>,
-		facet?: {
-			facet_by?: FacetBy;
-			enable_facet_total?: EnableFacetTotal;
-		},
+	async searchDocuments<Filter extends SearchFilters<Inferred>>(
+		data: Filter,
 	): Promise<{
 		count: number;
 		data: Inferred[];
-		facet: FacetBy extends keyof Inferred
-			? Simplify<
-					Record<
-						NonNullable<Inferred[FacetBy]> extends string
-							? NonNullable<Inferred[FacetBy]>
-							: never,
-						number
-					> &
-						(EnableFacetTotal extends true
-							? {
-									total: number;
-								}
-							: {})
-				>
-			: never;
+		facet: Simplify<InferFacetResponse<Inferred, Filter>>;
 	}> {
 		const res = await this.data.client
 			.collections(this.name)
@@ -236,11 +216,11 @@ export class TSense<
 				filter_by: this.buildFilter(data).join("&&"),
 				page: data.page,
 				limit: data.limit,
-				facet_by: facet?.facet_by as any,
+				facet_by: data?.facet_by as any,
 			});
 
-		const facet_result: any = facet?.facet_by
-			? facet.enable_facet_total
+		const facet_result: any = data?.facet_by
+			? data.enable_facet_total
 				? { total: 0 }
 				: {}
 			: undefined;
@@ -249,7 +229,9 @@ export class TSense<
 			for (const iter of res.facet_counts[0].counts) {
 				facet_result[iter.value] = iter.count;
 
-				if (facet?.enable_facet_total) facet_result.total += iter.count;
+				if (data?.enable_facet_total) {
+					facet_result.total += iter.count;
+				}
 			}
 		}
 
