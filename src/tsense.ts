@@ -34,6 +34,7 @@ export class TSense<T extends Type> {
 	private enableNested = false;
 	private baseURL: string;
 	private headers: Record<string, string>;
+	infer: T["infer"] = undefined;
 
 	constructor(private options: TsenseOptions<T>) {
 		const { connection } = options;

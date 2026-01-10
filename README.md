@@ -40,6 +40,8 @@ const UsersCollection = new TSense({
   validateOnUpsert: true,
 });
 
+type User = typeof UsersCollection.infer;
+
 await UsersCollection.create();
 
 await UsersCollection.upsert([
