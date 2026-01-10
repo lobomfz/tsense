@@ -514,8 +514,10 @@ export class TSense<T extends Type> {
 		const hits = res.hits ?? [];
 		const data: T["infer"][] = [];
 
-		const lastHit = hits[hits.length - 1]!.document as Record<string, unknown>;
-		const nextCursor = String(lastHit[field]);
+		const lastHit = hits[hits.length - 1]?.document as
+			| Record<string, unknown>
+			| undefined;
+		const nextCursor = lastHit ? String(lastHit[field]) : null;
 
 		for (const hit of hits) {
 			const doc = this.deserializeDoc(hit.document as Record<string, unknown>);
