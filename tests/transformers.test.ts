@@ -177,6 +177,43 @@ describe("TSense with Date fields", () => {
 		expect(data.length).toBe(1);
 		expect(data[0].id).toBe("post-specific-date");
 	});
+
+	it("should paginate with Date cursor in searchList", async () => {
+		await PostsCollection.upsert([
+			{
+				id: "cursor-1",
+				title: "First",
+				created_at: new Date("2024-01-01T00:00:00.000Z"),
+			},
+			{
+				id: "cursor-2",
+				title: "Second",
+				created_at: new Date("2024-02-01T00:00:00.000Z"),
+			},
+			{
+				id: "cursor-3",
+				title: "Third",
+				created_at: new Date("2024-03-01T00:00:00.000Z"),
+			},
+		]);
+
+		const page1 = await PostsCollection.searchList({
+			sort: { field: "created_at", direction: "asc" },
+			limit: 2,
+		});
+
+		expect(page1.data.length).toBe(2);
+		expect(page1.nextCursor).not.toBeNull();
+
+		const page2 = await PostsCollection.searchList({
+			sort: { field: "created_at", direction: "asc" },
+			limit: 2,
+			cursor: page1.nextCursor!,
+		});
+
+		expect(page2.data[0].id).not.toBe(page1.data[0].id);
+		expect(page2.data[0].id).not.toBe(page1.data[1].id);
+	});
 });
 
 describe("custom transformers", () => {
