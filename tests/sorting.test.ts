@@ -2,11 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { UsersCollection as collection } from "./helpers";
 
 beforeAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 	await collection.create();
 
 	// Seed test data
-	await collection.upsertDocuments([
+	await collection.upsert([
 		{
 			id: "1",
 			name: "Alice",
@@ -35,13 +35,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 });
 
 describe("sorting", () => {
 	it("should sort by field ascending", async () => {
-		const result = await collection.searchDocuments({
-			order_by: ["age asc"],
+		const result = await collection.search({
+			sortBy: ["age:asc"],
 			limit: 50,
 		});
 
@@ -51,8 +51,8 @@ describe("sorting", () => {
 	});
 
 	it("should sort by field descending", async () => {
-		const result = await collection.searchDocuments({
-			order_by: ["age desc"],
+		const result = await collection.search({
+			sortBy: ["age:desc"],
 			limit: 50,
 		});
 
@@ -61,10 +61,9 @@ describe("sorting", () => {
 		}
 	});
 
-	it("should sort by field with default direction", async () => {
-		const result = await collection.searchDocuments({
-			order_by: "age",
-			direction: "asc",
+	it("should sort by field with explicit direction", async () => {
+		const result = await collection.search({
+			sortBy: ["age:asc"],
 			limit: 50,
 		});
 
@@ -74,8 +73,8 @@ describe("sorting", () => {
 	});
 
 	it("should sort by multiple fields", async () => {
-		const result = await collection.searchDocuments({
-			order_by: ["age desc", "name asc"],
+		const result = await collection.search({
+			sortBy: ["age:desc", "name:asc"],
 			limit: 50,
 		});
 
@@ -83,22 +82,21 @@ describe("sorting", () => {
 	});
 
 	it("should sort by text relevance score", async () => {
-		const result = await collection.searchDocuments({
-			search: "Alice",
-			order_by: "score",
+		const result = await collection.search({
+			query: "Alice",
+			sortBy: ["score:desc"],
 			limit: 50,
 		});
 
 		expect(result.data.length).toBeGreaterThan(0);
 	});
 
-	it("should default to desc when order_by has no direction", async () => {
-		const result = await collection.searchDocuments({
-			order_by: "age",
+	it("should sort by age descending", async () => {
+		const result = await collection.search({
+			sortBy: ["age:desc"],
 			limit: 10,
 		});
 
-		// Should be descending by default
 		expect(result.data.length).toBeGreaterThan(0);
 		for (let i = 1; i < result.data.length; i++) {
 			expect(result.data[i].age).toBeLessThanOrEqual(result.data[i - 1].age);
@@ -106,8 +104,8 @@ describe("sorting", () => {
 	});
 
 	it("should ignore undefined entries in order_by array", async () => {
-		const result = await collection.searchDocuments({
-			order_by: ["undefined", "age asc"] as any,
+		const result = await collection.search({
+			sortBy: ["undefined", "age:asc"] as any,
 			limit: 10,
 		});
 
@@ -119,8 +117,8 @@ describe("sorting", () => {
 	});
 
 	it("should sort by string field (name asc)", async () => {
-		const result = await collection.searchDocuments({
-			order_by: ["name asc"],
+		const result = await collection.search({
+			sortBy: ["name:asc"],
 			limit: 10,
 		});
 

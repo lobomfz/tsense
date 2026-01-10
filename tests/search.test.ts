@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { UsersCollection as collection } from "./helpers";
 
 beforeAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 	await collection.create();
 
-	await collection.upsertDocuments([
+	await collection.upsert([
 		{
 			id: "10",
 			name: "Alice Williams",
@@ -22,13 +22,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 });
 
 describe("search", () => {
 	it("should search by text query", async () => {
-		const result = await collection.searchDocuments({
-			search: "Alice",
+		const result = await collection.search({
+			query: "Alice",
 		});
 
 		expect(result.count).toBeGreaterThan(0);
@@ -36,8 +36,8 @@ describe("search", () => {
 	});
 
 	it("should highlight search by text query", async () => {
-		const result = await collection.searchDocuments({
-			search: "Alice",
+		const result = await collection.search({
+			query: "Alice",
 			highlight: true,
 		});
 
@@ -46,16 +46,16 @@ describe("search", () => {
 	});
 
 	it("should search with empty query", async () => {
-		const result = await collection.searchDocuments({});
+		const result = await collection.search({});
 
 		expect(result.count).toBeGreaterThan(0);
 		expect(result.data.length).toBeGreaterThan(0);
 	});
 
 	it("should search with search_keys parameter", async () => {
-		const result = await collection.searchDocuments({
-			search: "charlie@example.com",
-			search_keys: ["email"],
+		const result = await collection.search({
+			query: "charlie@example.com",
+			queryBy: ["email"],
 		});
 
 		expect(result.count).toBeGreaterThan(0);
@@ -63,7 +63,7 @@ describe("search", () => {
 	});
 
 	it("should limit results", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			limit: 2,
 		});
 
@@ -71,12 +71,12 @@ describe("search", () => {
 	});
 
 	it("should paginate results", async () => {
-		const page1 = await collection.searchDocuments({
+		const page1 = await collection.search({
 			limit: 2,
 			page: 1,
 		});
 
-		const page2 = await collection.searchDocuments({
+		const page2 = await collection.search({
 			limit: 2,
 			page: 2,
 		});

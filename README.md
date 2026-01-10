@@ -1,121 +1,151 @@
-## TSense (WIP)
+# TSense
 
-Opinionated, fully-typed typesense client
+Opinionated, fully-typed Typesense client powered by [Arktype](https://arktype.io/)
 
-# TO-DO
-- [ ] Remove base typesense dependency
-- [ ] Better filter support (includes, exact, etc...)
-- [ ] Documentation
-- [ ] Improve tests
-- [ ] Facet
+## Installation
 
-# Example
+```bash
+bun add tsense arktype
+```
+
+## Example
+
 ```typescript
-import { Client } from "typesense";
+import { type } from "arktype";
 import { TSense } from "tsense";
 
-export const client = new Client({
-	nodes: [
-		{
-			host: "127.0.0.1",
-			port: 8108,
-			protocol: "http",
-		},
-	],
-	apiKey: "123",
-	connectionTimeoutSeconds: 2,
+const UsersCollection = new TSense({
+  name: "users",
+  schema: type({
+    "id?": "string",
+    email: "string",
+    age: type("number.integer").configure({ type: "int32", sort: true }),
+    "company?": type.enumerated("netflix", "google").configure({ facet: true }),
+    "phone?": "string",
+    name: type("string").configure({ sort: true }),
+    "work_history?": type({
+      company: "string",
+      date: "string",
+    })
+      .array()
+      .configure({ type: "object[]", index: false }),
+  }),
+  connection: {
+    host: "127.0.0.1",
+    port: 8108,
+    protocol: "http",
+    apiKey: "123",
+  },
+  defaultSearchField: "name",
+  validateOnUpsert: true,
 });
 
-export const UsersCollection = new TSense("users", {
-	client,
-	fields: {
-		// specify the typesense type directly as a string
-		email: "string",
-		age: "int32",
-		// suffix it with a "?" to mark as optional
-		phone: "string?",
-		name: {
-			type: "string",
-			sort: true,
-		},
-		company: {
-			type: "string",
-			override: {} as "netflix" | "google",
-			facet: true,
-			optional: true,
-		},
-		work_history: {
-			// object and object[] auto-infers enable_nested_fields
-			type: "object[]",
-			index: false,
-			optional: true,
-			override: {} as {
-				company: string;
-				date: string;
-			}[],
-		},
-	},
-	default_search_field: "name",
+await UsersCollection.create();
+
+await UsersCollection.upsert([
+  { id: "1", email: "john@example.com", age: 30, name: "John Doe", company: "netflix" },
+  { id: "2", email: "jane@example.com", age: 25, name: "Jane Smith", company: "google" },
+]);
+
+const results = await UsersCollection.search({
+  query: "john",
+  queryBy: ["name", "email"],
+  sortBy: ["age:desc", "name:asc"],
+  filter: {
+    age: { min: 20 },
+    OR: [{ company: "google" }, { company: "netflix" }],
+  },
 });
 
-// infer the collection type (undefined at runtime)
-typeof UsersCollection.infer;
-/*
- {
-     id?: string | undefined;
-     phone?: string | null | undefined;
-     work_history?: {
-         company: string;
-         date: string;
-     }[] | null | undefined;
-     email: string;
-     age: number;
-     name: string;
- }
- */
-
-const results = await UsersCollection.searchDocuments({
-	search: "john",
-	search_keys: ["name"],
-	// can sort multiple fields
-	order_by: ["age desc", "name asc"],
-	// compiles into
-	// age:>=20&&((email:=@google.com)||(email:=@netflix.com))
-	filter: {
-		// min and max range on numbers
-		age: {
-			min: 20,
-		},
-		// OR syntax similar to prisma
-		OR: [
-			{
-				email: "@google.com",
-			},
-			{
-				email: "@netflix.com",
-			},
-		],
-	},
+const faceted = await UsersCollection.search({
+  query: "john",
+  facetBy: ["company"],
 });
 
-/*
-   typed as
-   count: number;
-   data: {
-        id?: string | undefined;
-        phone?: string | null | undefined;
-        ...
-	}[];
-   facet: {
-        netflix: number;
-        google: number;
-		// enabled by enable_facet_total
-        total: number;
-    };
- */
-const faceted = await UsersCollection.searchDocuments({
-	search: "john",
-	facet_by: "company",
-	enable_facet_total: true,
+const highlighted = await UsersCollection.search({
+  query: "john",
+  highlight: true,
 });
+
+await UsersCollection.drop();
+```
+
+## API Reference
+
+### Constructor
+
+```typescript
+new TSense({
+  name: string,
+  schema: Type,
+  connection: ConnectionConfig,
+  defaultSearchField?: keyof T,
+  defaultSortingField?: keyof T,
+  batchSize?: number,
+  validateOnUpsert?: boolean,
+})
+```
+
+### ConnectionConfig
+
+| Option     | Type                  | Description           |
+| ---------- | --------------------- | --------------------- |
+| `host`     | `string`              | Typesense server host |
+| `port`     | `number`              | Typesense server port |
+| `protocol` | `"http"` \| `"https"` | Connection protocol   |
+| `apiKey`   | `string`              | Typesense API key     |
+
+### Schema Configuration
+
+Use `.configure()` to set Typesense field options:
+
+```typescript
+type("string").configure({
+  type: "string",
+  facet: true,
+  sort: true,
+  index: true,
+});
+```
+
+### Collection Methods
+
+| Method | Description |
+| ------ | ----------- |
+| `create()` | Creates the collection in Typesense |
+| `drop()` | Deletes the collection |
+| `get(id)` | Retrieves a document by ID |
+| `delete(id)` | Deletes a document by ID |
+| `deleteMany(filter)` | Deletes documents matching filter |
+| `update(id, data)` | Updates a document by ID |
+| `updateMany(filter, data)` | Updates documents matching filter |
+| `upsert(docs)` | Inserts or updates documents |
+| `search(options)` | Searches the collection |
+
+### Search Options
+
+| Option      | Type                              | Description              |
+| ----------- | --------------------------------- | ------------------------ |
+| `query`     | `string`                          | Text search query        |
+| `queryBy`   | `(keyof T)[]`                     | Fields to search in      |
+| `filter`    | `FilterFor<T>`                    | Filter conditions        |
+| `sortBy`    | `"field:asc\|desc"[]`             | Sort order               |
+| `facetBy`   | `(keyof T)[]`                     | Fields to facet by       |
+| `page`      | `number`                          | Page number              |
+| `limit`     | `number`                          | Results per page         |
+| `pick`      | `(keyof T)[]`                     | Only return these fields |
+| `omit`      | `(keyof T)[]`                     | Exclude these fields     |
+| `highlight` | `boolean \| HighlightOptions<T>`  | Enable highlighting      |
+
+Note: `pick` and `omit` are mutually exclusive.
+
+### Filter Syntax
+
+```typescript
+filter: { name: "John" }                    // Exact match
+filter: { age: 30 }                         // Numeric match
+filter: { age: [25, 30, 35] }               // IN
+filter: { age: { min: 20, max: 40 } }       // Range
+filter: { name: { not: "John" } }           // Not equal
+filter: { OR: [{ age: 25 }, { age: 30 }] }  // OR conditions
 ```

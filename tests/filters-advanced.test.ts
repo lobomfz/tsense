@@ -2,11 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { UsersCollection as collection } from "./helpers";
 
 beforeAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 	await collection.create();
 
 	// Seed test data
-	await collection.upsertDocuments([
+	await collection.upsert([
 		{
 			id: "1",
 			name: "Alice Williams",
@@ -47,12 +47,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 });
 
 describe("advanced filtering", () => {
 	it("should filter by array of strings", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { name: ["Alice Williams", "Frank White"] },
 		});
 
@@ -62,7 +62,7 @@ describe("advanced filtering", () => {
 	});
 
 	it("should filter by range with min == max (exact match)", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: { min: 30, max: 30 } },
 		});
 
@@ -71,7 +71,7 @@ describe("advanced filtering", () => {
 	});
 
 	it("should return empty results when min > max", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: { min: 50, max: 20 } },
 		});
 
@@ -80,7 +80,7 @@ describe("advanced filtering", () => {
 	});
 
 	it("should combine OR with additional AND filter", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: {
 				OR: [{ age: 22 }, { age: 45 }],
 				email: { not: "eva@example.com" },
@@ -97,7 +97,7 @@ describe("advanced filtering", () => {
 	});
 
 	it("should ignore undefined filter values", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: {
 				age: undefined as any,
 				name: "David Lee",
@@ -110,7 +110,7 @@ describe("advanced filtering", () => {
 	});
 
 	it("should handle nested OR conditions", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: {
 				OR: [
 					{ age: 22 }, // Alice

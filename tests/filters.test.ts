@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { UsersCollection as collection } from "./helpers";
 
 beforeAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 	await collection.create();
 
-	await collection.upsertDocuments([
+	await collection.upsert([
 		{
 			id: "20",
 			name: "David Lee",
@@ -28,12 +28,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 });
 
 describe("filters", () => {
 	it("should filter by exact string match", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { name: "David Lee" },
 		});
 
@@ -42,7 +42,7 @@ describe("filters", () => {
 	});
 
 	it("should filter by exact number match", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: 22 },
 		});
 
@@ -51,7 +51,7 @@ describe("filters", () => {
 	});
 
 	it("should filter by array of values", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: [22, 40] },
 		});
 
@@ -59,7 +59,7 @@ describe("filters", () => {
 	});
 
 	it("should filter by range with min", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: { min: 40 } },
 		});
 
@@ -69,7 +69,7 @@ describe("filters", () => {
 	});
 
 	it("should filter by range with max", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: { max: 30 } },
 		});
 
@@ -79,7 +79,7 @@ describe("filters", () => {
 	});
 
 	it("should filter by range with min and max", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: { min: 25, max: 35 } },
 		});
 
@@ -90,7 +90,7 @@ describe("filters", () => {
 	});
 
 	it("should filter with not operator", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { name: { not: "David Lee" } },
 		});
 
@@ -100,7 +100,7 @@ describe("filters", () => {
 	});
 
 	it("should filter with OR conditions", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: {
 				OR: [{ age: 22 }, { age: 45 }],
 			},
@@ -110,7 +110,7 @@ describe("filters", () => {
 	});
 
 	it("should combine multiple filters", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: {
 				age: { min: 20, max: 50 },
 				name: { not: "David Lee" },

@@ -2,17 +2,17 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { UsersCollection as collection } from "./helpers";
 
 beforeAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 	await collection.create();
 });
 
 afterAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 });
 
 describe("upsert", () => {
 	it("should upsert a single document", async () => {
-		const result = await collection.upsertDocuments({
+		const result = await collection.upsert({
 			id: "1",
 			name: "John Doe",
 			email: "john@example.com",
@@ -24,7 +24,7 @@ describe("upsert", () => {
 	});
 
 	it("should upsert multiple documents", async () => {
-		const result = await collection.upsertDocuments([
+		const result = await collection.upsert([
 			{
 				id: "2",
 				name: "Jane Smith",
@@ -52,14 +52,14 @@ describe("upsert", () => {
 	});
 
 	it("should update existing document", async () => {
-		await collection.upsertDocuments({
+		await collection.upsert({
 			id: "1",
 			name: "John Doe Updated",
 			email: "john.updated@example.com",
 			age: 31,
 		});
 
-		const searchResult = await collection.searchDocuments({
+		const searchResult = await collection.search({
 			filter: { id: "1" },
 		});
 
@@ -67,9 +67,9 @@ describe("upsert", () => {
 		expect(searchResult.data[0].age).toBe(31);
 	});
 
-	it("should return undefined when upserting empty array", async () => {
-		const result = await collection.upsertDocuments([]);
+	it("should return empty array when upserting empty array", async () => {
+		const result = await collection.upsert([]);
 
-		expect(result).toBeUndefined();
+		expect(result).toEqual([]);
 	});
 });

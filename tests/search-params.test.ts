@@ -2,11 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { UsersCollection as collection } from "./helpers";
 
 beforeAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 	await collection.create();
 
 	// Seed test data
-	await collection.upsertDocuments([
+	await collection.upsert([
 		{
 			id: "1",
 			name: "Alice Johnson",
@@ -41,14 +41,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 });
 
 describe("search parameters", () => {
 	it("should support multiple search_keys", async () => {
-		const result = await collection.searchDocuments({
-			search: "johnson",
-			search_keys: ["email", "name"],
+		const result = await collection.search({
+			query: "johnson",
+			queryBy: ["email", "name"],
 		});
 
 		expect(result.count).toBeGreaterThan(0);
@@ -56,8 +56,8 @@ describe("search parameters", () => {
 	});
 
 	it("should tolerate highlight flag without breaking", async () => {
-		const result = await collection.searchDocuments({
-			search: "Bob",
+		const result = await collection.search({
+			query: "Bob",
 			highlight: true,
 		});
 
@@ -66,7 +66,7 @@ describe("search parameters", () => {
 	});
 
 	it("should return empty data for very large page number", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			page: 9999,
 			limit: 10,
 		});

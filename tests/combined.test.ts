@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { UsersCollection as collection } from "./helpers";
 
 beforeAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 	await collection.create();
 
-	await collection.upsertDocuments([
+	await collection.upsert([
 		{
 			id: "1",
 			name: "Alice",
@@ -28,16 +28,16 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await collection.delete().catch(() => null);
+	await collection.drop().catch(() => null);
 });
 
 describe("combined operations", () => {
 	it("should search with filter and sort", async () => {
-		const result = await collection.searchDocuments({
-			search: "example.com",
-			search_keys: ["email"],
+		const result = await collection.search({
+			query: "example.com",
+			queryBy: ["email"],
 			filter: { age: { min: 25 } },
-			order_by: ["age asc"],
+			sortBy: ["age:asc"],
 			limit: 10,
 		});
 
@@ -48,9 +48,9 @@ describe("combined operations", () => {
 	});
 
 	it("should filter and sort with pagination", async () => {
-		const result = await collection.searchDocuments({
+		const result = await collection.search({
 			filter: { age: { min: 25 } },
-			order_by: ["age desc"],
+			sortBy: ["age:desc"],
 			page: 1,
 			limit: 5,
 		});

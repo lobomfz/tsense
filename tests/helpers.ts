@@ -1,112 +1,51 @@
-import { Client } from "typesense";
+import { type } from "arktype";
 import { TSense } from "../src/index";
 
-export const client = new Client({
-	nodes: [
-		{
-			host: "127.0.0.1",
-			port: 8108,
-			protocol: "http",
-		},
-	],
-	apiKey: "123",
-	connectionTimeoutSeconds: 2,
-});
-
-export const UsersCollection = new TSense("users", {
-	client,
-	fields: {
-		// specify the typesense type directly
-		email: "string",
-		age: "int32",
-		company: {
-			type: "string",
-			override: {} as "netflix" | "google",
-			facet: true,
-			optional: true,
-		},
-		// suffix it with a "?" to mark as optional
-		phone: "string?",
-		name: {
-			type: "string",
-			sort: true,
-		},
-		work_history: {
-			// object and object[] auto-infers enable_nested_fields
+const UserSchema = type({
+	"id?": "string",
+	email: "string",
+	age: type("number.integer").configure({
+		type: "int32",
+		facet: false,
+		sort: true,
+		index: true,
+	}),
+	"company?": type.enumerated("netflix", "google").configure({
+		type: "string",
+		facet: true,
+		sort: false,
+		index: true,
+	}),
+	"phone?": "string",
+	name: type("string").configure({
+		type: "string",
+		facet: false,
+		sort: true,
+		index: true,
+	}),
+	"work_history?": type({
+		company: "string",
+		date: "string",
+	})
+		.array()
+		.configure({
 			type: "object[]",
+			facet: false,
+			sort: false,
 			index: false,
-			optional: true,
-			override: {} as {
-				company: string;
-				date: string;
-			}[],
-		},
+		}),
+});
+
+export const UsersCollection = new TSense({
+	name: "users",
+	schema: UserSchema,
+	connection: {
+		host: "127.0.0.1",
+		port: 8108,
+		protocol: "http",
+		apiKey: "123",
 	},
-	default_search_field: "name",
+	defaultSearchField: "name",
 });
 
-// infer the collection type (undefined at runtime)
-typeof UsersCollection.infer;
-/*
- {
-     id?: string | undefined;
-     phone?: string | null | undefined;
-	 company?: "netflix" | "google" | null | undefined;
-     work_history?: {
-         company: string;
-         date: string;
-     }[] | null | undefined;
-     email: string;
-     age: number;
-     name: string;
- }
- */
-
-await UsersCollection.delete().catch(() => null);
-await UsersCollection.create();
-
-const results = await UsersCollection.searchDocuments({
-	search: "john",
-	search_keys: ["name"],
-	// can sort multiple fields
-	order_by: ["age desc", "name asc"],
-	// automatically highlights and replaces the value
-	// { name: "<mark>John</mark> doe" }
-	highlight: true,
-	// compiles into
-	// age:>=20&&((email:=@google.com)||(email:=@netflix.com))
-	filter: {
-		// min and max range on numbers
-		age: {
-			min: 20,
-		},
-		// OR syntax similar to prisma
-		OR: [
-			{
-				email: "@google.com",
-			},
-			{
-				email: "@netflix.com",
-			},
-		],
-	},
-});
-
-/*
-   count: number;
-   data: {
-        id?: string | undefined;
-        phone?: string | null | undefined;
-        ...
-	}[];
-   facet: {
-        netflix: number;
-        google: number;
-        total: number;
-    };
- */
-const faceted = await UsersCollection.searchDocuments({
-	search: "john",
-	facet_by: "company",
-	enable_facet_total: true,
-});
+export type User = typeof UserSchema.infer;
