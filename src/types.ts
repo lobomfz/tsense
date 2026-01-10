@@ -1,4 +1,5 @@
 import type { Type } from "arktype";
+import type { FieldTransformer } from "./transformers/types.js";
 
 type BaseIfArray<T> = T extends (infer Q)[] ? Q : T;
 
@@ -42,6 +43,8 @@ export type TsenseOptions<T extends Type> = {
 	defaultSortingField?: keyof T["infer"];
 	batchSize?: number;
 	validateOnUpsert?: boolean;
+	autoSync?: boolean;
+	transformers?: FieldTransformer[];
 };
 
 type SingleFilter<T> = Partial<{
@@ -49,8 +52,10 @@ type SingleFilter<T> = Partial<{
 		| BaseIfArray<T[K]>
 		| NonNullable<BaseIfArray<T[K]>>[]
 		| { not?: BaseIfArray<T[K]> }
-		| (NonNullable<T[K]> extends number
-				? { min?: number; max?: number }
+		| (NonNullable<T[K]> extends number | Date
+				? NonNullable<T[K]> extends infer Type
+					? { min?: Type; max?: Type }
+					: never
 				: never);
 }>;
 
@@ -103,4 +108,23 @@ export type UpsertResult = {
 	success: boolean;
 	error?: string;
 	document?: unknown;
+};
+
+type SearchListSort<T> = {
+	field: keyof T;
+	direction: "asc" | "desc";
+};
+
+export type SearchListOptions<T> = {
+	query?: string;
+	queryBy?: (keyof T)[];
+	filter?: FilterFor<T>;
+	sort: SearchListSort<T>;
+	limit?: number;
+	cursor?: string;
+};
+
+export type SearchListResult<T> = {
+	data: T[];
+	nextCursor: string | null;
 };

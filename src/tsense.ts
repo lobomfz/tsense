@@ -1,15 +1,18 @@
 import type { Type } from "arktype";
 import redaxios from "redaxios";
 
-const axios = redaxios.default ?? redaxios;
-
 import type { TsenseFieldMeta, TsenseFieldType } from "./env.js";
+import { TSenseMigrator } from "./migrator.js";
+import { defaultTransformers } from "./transformers/defaults.js";
+import type { FieldTransformer } from "./transformers/types.js";
 import type {
 	DeleteResult,
 	FieldSchema,
 	FilterFor,
 	HighlightOptions,
 	SearchApiResponse,
+	SearchListOptions,
+	SearchListResult,
 	SearchOptions,
 	SearchResult,
 	TsenseOptions,
@@ -17,7 +20,7 @@ import type {
 	UpsertResult,
 } from "./types.js";
 
-const requiresNested = ["object", "object[]"];
+const redaxiosInstance = redaxios.default ?? redaxios;
 
 const arkToTsense: Record<string, TsenseFieldMeta["type"]> = {
 	string: "string",
@@ -29,18 +32,23 @@ const arkToTsense: Record<string, TsenseFieldMeta["type"]> = {
 	"boolean[]": "bool[]",
 };
 
+export type AxiosInstance = ReturnType<typeof redaxiosInstance.create>;
+
 export class TSense<T extends Type> {
 	private fields: FieldSchema[] = [];
-	private enableNested = false;
-	private baseURL: string;
-	private headers: Record<string, string>;
+	private axios: AxiosInstance;
+	private synced = false;
+	private fieldTransformers = new Map<string, FieldTransformer>();
+
 	infer: T["infer"] = undefined;
 
 	constructor(private options: TsenseOptions<T>) {
-		const { connection } = options;
-		this.baseURL = `${connection.protocol}://${connection.host}:${connection.port}`;
-		this.headers = { "X-TYPESENSE-API-KEY": connection.apiKey };
-		this.extractFields();
+		this.axios = redaxiosInstance.create({
+			baseURL: `${options.connection.protocol}://${options.connection.host}:${options.connection.port}`,
+			headers: { "X-TYPESENSE-API-KEY": options.connection.apiKey },
+		});
+
+		this.extractFields(options.transformers ?? defaultTransformers);
 	}
 
 	private inferType(arkType: string): TsenseFieldType {
@@ -55,7 +63,61 @@ export class TSense<T extends Type> {
 		return "string";
 	}
 
-	private extractFields() {
+	private serializeDoc(doc: T["infer"]): Record<string, unknown> {
+		const result = { ...(doc as Record<string, unknown>) };
+
+		for (const [field, transformer] of this.fieldTransformers) {
+			if (result[field] != null) {
+				result[field] = transformer.serialize(result[field]);
+			}
+		}
+
+		return result;
+	}
+
+	private deserializeDoc(doc: Record<string, unknown>): T["infer"] {
+		for (const [field, transformer] of this.fieldTransformers) {
+			if (doc[field] != null) {
+				doc[field] = transformer.deserialize(doc[field]);
+			}
+		}
+
+		return doc as T["infer"];
+	}
+
+	private serializeFilterValue(key: string, value: unknown): unknown {
+		const transformer = this.fieldTransformers.get(key);
+
+		if (!transformer) return value;
+
+		if (Array.isArray(value)) {
+			return value.map((v) => transformer.serialize(v));
+		}
+
+		if (typeof value === "object" && value !== null) {
+			const v = value as Record<string, unknown>;
+			const isFilterObject = "min" in v || "max" in v || "not" in v;
+
+			if (!isFilterObject) {
+				return transformer.serialize(value);
+			}
+
+			const result = { ...v };
+
+			if ("min" in v && v.min != null)
+				result.min = transformer.serialize(v.min);
+			if ("max" in v && v.max != null)
+				result.max = transformer.serialize(v.max);
+			if ("not" in v && v.not != null)
+				result.not = transformer.serialize(v.not);
+
+			return result;
+		}
+
+		return transformer.serialize(value);
+	}
+
+	private extractFields(transformers: FieldTransformer[]) {
 		const internal = this.options.schema as unknown as {
 			structure: {
 				props: {
@@ -75,21 +137,49 @@ export class TSense<T extends Type> {
 			const expression = String(prop.value.expression);
 			const domain = prop.value.domain;
 
-			const tsType = meta?.type ?? this.inferType(domain ?? expression);
+			const transformer = transformers.find((t) => t.match(expression, domain));
 
-			if (requiresNested.includes(tsType)) {
-				this.enableNested = true;
+			if (transformer) {
+				this.fieldTransformers.set(prop.key, transformer);
+				this.fields.push({
+					name: prop.key,
+					type: transformer.storageType,
+					optional: prop.kind === "optional",
+					facet: meta?.facet,
+					sort: meta?.sort,
+					index: meta?.index,
+				});
+				continue;
 			}
+
+			const type = meta?.type ?? this.inferType(domain ?? expression);
 
 			this.fields.push({
 				name: prop.key,
-				type: tsType,
+				type,
 				optional: prop.kind === "optional",
 				facet: meta?.facet,
 				sort: meta?.sort,
 				index: meta?.index,
 			});
 		}
+	}
+
+	private async ensureSynced(force?: boolean): Promise<void> {
+		if (!force && (this.synced || !this.options.autoSync)) return;
+
+		await new TSenseMigrator(
+			this.options.name,
+			this.fields,
+			this.options.defaultSortingField as string | undefined,
+			this.axios,
+		).sync();
+
+		this.synced = true;
+	}
+
+	async sync(): Promise<void> {
+		await this.ensureSynced(true);
 	}
 
 	private buildObjectFilter(key: string, value: unknown) {
@@ -123,14 +213,14 @@ export class TSense<T extends Type> {
 		const result: string[] = [];
 
 		for (const entry of Object.entries(filter ?? {})) {
-			const [key, value] = entry as [string, unknown];
+			const [key, rawValue] = entry as [string, unknown];
 
-			if (value == null) continue;
+			if (rawValue == null) continue;
 
 			if (key === "OR") {
 				const orFilter: string[] = [];
 
-				for (const condition of value as FilterFor<T["infer"]>[]) {
+				for (const condition of rawValue as FilterFor<T["infer"]>[]) {
 					const inner = this.buildFilter(condition);
 					orFilter.push(`(${inner.join("||")})`);
 				}
@@ -138,6 +228,8 @@ export class TSense<T extends Type> {
 				result.push(`(${orFilter.join("||")})`);
 				continue;
 			}
+
+			const value = this.serializeFilterValue(key, rawValue);
 
 			switch (typeof value) {
 				case "string":
@@ -176,16 +268,18 @@ export class TSense<T extends Type> {
 	}
 
 	async create(): Promise<this> {
-		await axios({
+		const enableNested = this.fields.some(
+			(f) => f.type === "object" || f.type === "object[]",
+		);
+
+		await this.axios({
 			method: "POST",
-			baseURL: this.baseURL,
 			url: "/collections",
-			headers: this.headers,
 			data: {
 				name: this.options.name,
 				fields: this.fields,
 				default_sorting_field: this.options.defaultSortingField,
-				enable_nested_fields: this.enableNested,
+				enable_nested_fields: enableNested,
 			},
 		});
 
@@ -193,34 +287,32 @@ export class TSense<T extends Type> {
 	}
 
 	async drop(): Promise<void> {
-		await axios({
+		await this.axios({
 			method: "DELETE",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}`,
-			headers: this.headers,
 		});
 	}
 
 	async get(id: string): Promise<T["infer"] | null> {
-		const { data } = await axios<T["infer"]>({
+		await this.ensureSynced();
+
+		const { data } = await this.axios<Record<string, unknown>>({
 			method: "GET",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}/documents/${id}`,
-			headers: this.headers,
 		}).catch((e: { status?: number }) => {
 			if (e.status === 404) return { data: null };
 			throw e;
 		});
 
-		return data;
+		return data ? this.deserializeDoc(data) : null;
 	}
 
 	async delete(id: string): Promise<boolean> {
-		const { data } = await axios<T["infer"]>({
+		await this.ensureSynced();
+
+		const { data } = await this.axios<T["infer"]>({
 			method: "DELETE",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}/documents/${id}`,
-			headers: this.headers,
 		}).catch((e: { status?: number }) => {
 			if (e.status === 404) return { data: null };
 			throw e;
@@ -230,17 +322,17 @@ export class TSense<T extends Type> {
 	}
 
 	async deleteMany(filter: FilterFor<T["infer"]>): Promise<DeleteResult> {
+		await this.ensureSynced();
+
 		const filterBy = this.buildFilter(filter).join("&&");
 
 		if (!filterBy) {
 			throw new Error("FILTER_REQUIRED");
 		}
 
-		const { data } = await axios<{ num_deleted: number }>({
+		const { data } = await this.axios<{ num_deleted: number }>({
 			method: "DELETE",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}/documents`,
-			headers: this.headers,
 			params: { filter_by: filterBy },
 		});
 
@@ -248,34 +340,38 @@ export class TSense<T extends Type> {
 	}
 
 	async update(id: string, data: Partial<T["infer"]>): Promise<T["infer"]> {
-		const { data: updated } = await axios<T["infer"]>({
+		await this.ensureSynced();
+
+		const serialized = this.serializeDoc(data as T["infer"]);
+
+		const { data: updated } = await this.axios<Record<string, unknown>>({
 			method: "PATCH",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}/documents/${id}`,
-			headers: this.headers,
-			data,
+			data: serialized,
 		});
 
-		return updated;
+		return this.deserializeDoc(updated);
 	}
 
 	async updateMany(
 		filter: FilterFor<T["infer"]>,
 		data: Partial<T["infer"]>,
 	): Promise<UpdateResult> {
+		await this.ensureSynced();
+
 		const filterBy = this.buildFilter(filter).join("&&");
 
 		if (!filterBy) {
 			throw new Error("FILTER_REQUIRED");
 		}
 
-		const { data: result } = await axios<{ num_updated: number }>({
+		const serialized = this.serializeDoc(data as T["infer"]);
+
+		const { data: result } = await this.axios<{ num_updated: number }>({
 			method: "PATCH",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}/documents`,
-			headers: this.headers,
 			params: { filter_by: filterBy },
-			data,
+			data: serialized,
 		});
 
 		return { updated: result.num_updated };
@@ -284,6 +380,8 @@ export class TSense<T extends Type> {
 	async search(
 		options: SearchOptions<T["infer"]>,
 	): Promise<SearchResult<T["infer"]>> {
+		await this.ensureSynced();
+
 		const params: Record<string, unknown> = {
 			q: options.query ?? "",
 			query_by: (
@@ -314,11 +412,14 @@ export class TSense<T extends Type> {
 		}
 
 		const highlight = options.highlight;
+
 		const highlightEnabled = !!highlight;
+
 		let highlightOpts: HighlightOptions<T["infer"]> | undefined;
 
 		if (typeof highlight === "object") {
 			highlightOpts = highlight;
+
 			if (highlightOpts.fields) {
 				params.highlight_fields = (highlightOpts.fields as string[]).join(",");
 			}
@@ -330,11 +431,9 @@ export class TSense<T extends Type> {
 			}
 		}
 
-		const { data: res } = await axios<SearchApiResponse<T["infer"]>>({
+		const { data: res } = await this.axios<SearchApiResponse<T["infer"]>>({
 			method: "GET",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}/documents/search`,
-			headers: this.headers,
 			params,
 		});
 
@@ -353,7 +452,8 @@ export class TSense<T extends Type> {
 				}
 			}
 
-			data.push(hit.document as T["infer"]);
+			const doc = this.deserializeDoc(hit.document as Record<string, unknown>);
+			data.push(doc);
 			scores.push(hit.text_match ?? 0);
 		}
 
@@ -376,7 +476,62 @@ export class TSense<T extends Type> {
 		};
 	}
 
+	async searchList(
+		options: SearchListOptions<T["infer"]>,
+	): Promise<SearchListResult<T["infer"]>> {
+		await this.ensureSynced();
+
+		const limit = Math.min(options.limit ?? 20, 100);
+		const field = options.sort.field as string;
+
+		const params: Record<string, unknown> = {
+			q: options.query ?? "",
+			query_by: (
+				(options.queryBy as string[]) ?? [
+					this.options.defaultSearchField as string,
+				]
+			).join(","),
+			per_page: limit,
+			sort_by: `${field}:${options.sort.direction}`,
+		};
+
+		const filterParts = this.buildFilter(options.filter);
+
+		if (options.cursor) {
+			const op = options.sort.direction === "asc" ? ">" : "<";
+			filterParts.push(`${field}:${op}${options.cursor}`);
+		}
+
+		const filterBy = filterParts.join("&&");
+		if (filterBy) params.filter_by = filterBy;
+
+		const { data: res } = await this.axios<SearchApiResponse<T["infer"]>>({
+			method: "GET",
+			url: `/collections/${this.options.name}/documents/search`,
+			params,
+		});
+
+		const hits = res.hits ?? [];
+		const data: T["infer"][] = [];
+
+		for (const hit of hits) {
+			const doc = this.deserializeDoc(hit.document as Record<string, unknown>);
+			data.push(doc);
+		}
+
+		if (data.length < limit) {
+			return { data, nextCursor: null };
+		}
+
+		const lastHit = hits[hits.length - 1]!.document as Record<string, unknown>;
+		const nextCursor = String(lastHit[field]);
+
+		return { data, nextCursor };
+	}
+
 	async upsert(docs: T["infer"] | T["infer"][]): Promise<UpsertResult[]> {
+		await this.ensureSynced();
+
 		const items = Array.isArray(docs) ? docs : [docs];
 
 		if (!items.length) return [];
@@ -387,7 +542,9 @@ export class TSense<T extends Type> {
 			}
 		}
 
-		const payload = items.map((item) => JSON.stringify(item)).join("\n");
+		const payload = items
+			.map((item) => JSON.stringify(this.serializeDoc(item)))
+			.join("\n");
 
 		const params: Record<string, unknown> = { action: "upsert" };
 
@@ -395,11 +552,10 @@ export class TSense<T extends Type> {
 			params.batch_size = this.options.batchSize;
 		}
 
-		const { data } = await axios({
+		const { data } = await this.axios({
 			method: "POST",
-			baseURL: this.baseURL,
 			url: `/collections/${this.options.name}/documents/import`,
-			headers: { ...this.headers, "Content-Type": "text/plain" },
+			headers: { "Content-Type": "text/plain" },
 			params,
 			data: payload,
 		});

@@ -74,29 +74,6 @@ await UsersCollection.drop();
 
 ## API Reference
 
-### Constructor
-
-```typescript
-new TSense({
-  name: string,
-  schema: Type,
-  connection: ConnectionConfig,
-  defaultSearchField?: keyof T,
-  defaultSortingField?: keyof T,
-  batchSize?: number,
-  validateOnUpsert?: boolean,
-})
-```
-
-### ConnectionConfig
-
-| Option     | Type                  | Description           |
-| ---------- | --------------------- | --------------------- |
-| `host`     | `string`              | Typesense server host |
-| `port`     | `number`              | Typesense server port |
-| `protocol` | `"http"` \| `"https"` | Connection protocol   |
-| `apiKey`   | `string`              | Typesense API key     |
-
 ### Schema Configuration
 
 Use `.configure()` to set Typesense field options:
@@ -124,22 +101,6 @@ type("string").configure({
 | `upsert(docs)` | Inserts or updates documents |
 | `search(options)` | Searches the collection |
 
-### Search Options
-
-| Option      | Type                              | Description              |
-| ----------- | --------------------------------- | ------------------------ |
-| `query`     | `string`                          | Text search query        |
-| `queryBy`   | `(keyof T)[]`                     | Fields to search in      |
-| `filter`    | `FilterFor<T>`                    | Filter conditions        |
-| `sortBy`    | `"field:asc\|desc"[]`             | Sort order               |
-| `facetBy`   | `(keyof T)[]`                     | Fields to facet by       |
-| `page`      | `number`                          | Page number              |
-| `limit`     | `number`                          | Results per page         |
-| `pick`      | `(keyof T)[]`                     | Only return these fields |
-| `omit`      | `(keyof T)[]`                     | Exclude these fields     |
-| `highlight` | `boolean \| HighlightOptions<T>`  | Enable highlighting      |
-
-Note: `pick` and `omit` are mutually exclusive.
 
 ### Filter Syntax
 
