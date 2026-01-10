@@ -127,4 +127,5 @@ export type SearchListOptions<T> = {
 export type SearchListResult<T> = {
 	data: T[];
 	nextCursor: string | null;
+	total: number;
 };

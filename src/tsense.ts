@@ -524,10 +524,10 @@ export class TSense<T extends Type> {
 		}
 
 		if (data.length < limit) {
-			return { data, nextCursor: null };
+			return { data, nextCursor: null, total: res.found };
 		}
 
-		return { data, nextCursor };
+		return { data, nextCursor, total: res.found };
 	}
 
 	async upsert(docs: T["infer"] | T["infer"][]): Promise<UpsertResult[]> {
