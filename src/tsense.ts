@@ -483,6 +483,7 @@ export class TSense<T extends Type> {
 
 		const limit = Math.min(options.limit ?? 20, 100);
 		const field = options.sort.field as string;
+		const page = options.cursor ? Number(options.cursor) : 1;
 
 		const params: Record<string, unknown> = {
 			q: options.query ?? "",
@@ -492,17 +493,14 @@ export class TSense<T extends Type> {
 				]
 			).join(","),
 			per_page: limit,
+			page,
 			sort_by: `${field}:${options.sort.direction}`,
 		};
 
 		const filterParts = this.buildFilter(options.filter);
 
-		if (options.cursor) {
-			const op = options.sort.direction === "asc" ? ">" : "<";
-			filterParts.push(`${field}:${op}${options.cursor}`);
-		}
-
 		const filterBy = filterParts.join("&&");
+
 		if (filterBy) params.filter_by = filterBy;
 
 		const { data: res } = await this.axios<SearchApiResponse<T["infer"]>>({
@@ -514,20 +512,14 @@ export class TSense<T extends Type> {
 		const hits = res.hits ?? [];
 		const data: T["infer"][] = [];
 
-		const lastHit = hits[hits.length - 1]?.document as
-			| Record<string, unknown>
-			| undefined;
-		const nextCursor = lastHit ? String(lastHit[field]) : null;
-
 		for (const hit of hits) {
 			const doc = this.deserializeDoc(hit.document as Record<string, unknown>);
 
 			data.push(doc);
 		}
 
-		if (data.length < limit) {
-			return { data, nextCursor: null, total: res.found };
-		}
+		const hasMore = page * limit < res.found;
+		const nextCursor = hasMore ? String(page + 1) : null;
 
 		return { data, nextCursor, total: res.found };
 	}
