@@ -51,14 +51,18 @@ export class TSense<T extends Type> {
 		this.extractFields(options.transformers ?? defaultTransformers);
 	}
 
+	private getBaseType(expression: string, domain?: string): string {
+		if (domain && domain !== "undefined") return domain;
+		return expression.replace(/ \| undefined$/, "");
+	}
+
 	private inferType(arkType: string): TsenseFieldType {
 		const direct = arkToTsense[arkType];
 
 		if (direct) return direct;
-
 		if (arkType.includes("[]")) return "object[]";
+		if (arkType.includes("'") || arkType.includes('"')) return "string";
 		if (arkType.includes("{") || arkType.includes("|")) return "object";
-		if (arkType.startsWith("'") || arkType.includes("'")) return "string";
 
 		return "string";
 	}
@@ -136,8 +140,9 @@ export class TSense<T extends Type> {
 			const meta = prop.value.meta as TsenseFieldMeta | undefined;
 			const expression = String(prop.value.expression);
 			const domain = prop.value.domain;
+			const baseType = this.getBaseType(expression, domain);
 
-			const transformer = transformers.find((t) => t.match(expression, domain));
+			const transformer = transformers.find((t) => t.match(baseType, domain));
 
 			if (transformer) {
 				this.fieldTransformers.set(prop.key, transformer);
@@ -152,7 +157,7 @@ export class TSense<T extends Type> {
 				continue;
 			}
 
-			const type = meta?.type ?? this.inferType(domain ?? expression);
+			const type = meta?.type ?? this.inferType(baseType);
 
 			this.fields.push({
 				name: prop.key,
@@ -287,6 +292,7 @@ export class TSense<T extends Type> {
 	}
 
 	async drop(): Promise<void> {
+		console.log("dropping");
 		await this.axios({
 			method: "DELETE",
 			url: `/collections/${this.options.name}`,
@@ -522,6 +528,34 @@ export class TSense<T extends Type> {
 		const nextCursor = hasMore ? String(page + 1) : null;
 
 		return { data, nextCursor, total: res.found };
+	}
+
+	async count(filter?: FilterFor<T["infer"]>): Promise<number> {
+		await this.ensureSynced();
+
+		const filterBy = this.buildFilter(filter).join("&&");
+
+		if (!filterBy) {
+			const { data } = await this.axios<{ num_documents: number }>({
+				method: "GET",
+				url: `/collections/${this.options.name}`,
+			});
+
+			return data.num_documents;
+		}
+
+		const { data } = await this.axios<{ found: number }>({
+			method: "GET",
+			url: `/collections/${this.options.name}/documents/search`,
+			params: {
+				q: "*",
+				query_by: this.options.defaultSearchField as string,
+				per_page: 0,
+				filter_by: filterBy,
+			},
+		});
+
+		return data.found;
 	}
 
 	async upsert(docs: T["infer"] | T["infer"][]): Promise<UpsertResult[]> {

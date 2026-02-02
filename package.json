@@ -1,6 +1,6 @@
 {
 	"name": "tsense",
-	"version": "0.0.13",
+	"version": "0.0.14",
 	"private": false,
 	"description": "Opinionated, fully typed typesense client",
 	"keywords": [
@@ -42,8 +42,8 @@
 		"@changesets/cli": "^2.29.7",
 		"@types/bun": "latest",
 		"arktype": "^2.1.29",
-		"oxfmt": "^0.23.0",
-		"oxlint": "^1.38.0"
+		"oxfmt": "^0.27.0",
+		"oxlint": "^1.42.0"
 	},
 	"peerDependencies": {
 		"arktype": "^2.1.29",
