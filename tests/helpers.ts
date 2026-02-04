@@ -1,9 +1,12 @@
 import { type } from "arktype";
 import { TSense } from "../src/index";
+import { connection } from "./config";
 
 const UserSchema = type({
 	"id?": "string",
-	email: "string",
+	"email?": type("string").configure({
+		sort: true,
+	}),
 	age: type("number.integer").configure({
 		type: "int32",
 		facet: false,
@@ -39,12 +42,7 @@ const UserSchema = type({
 export const UsersCollection = new TSense({
 	name: "users",
 	schema: UserSchema,
-	connection: {
-		host: "127.0.0.1",
-		port: 8108,
-		protocol: "http",
-		apiKey: "123",
-	},
+	connection,
 	defaultSearchField: "name",
 });
 

@@ -43,8 +43,9 @@ export type TsenseOptions<T extends Type> = {
 	defaultSortingField?: keyof T["infer"];
 	batchSize?: number;
 	validateOnUpsert?: boolean;
-	autoSync?: boolean;
+	autoSyncSchema?: boolean;
 	transformers?: FieldTransformer[];
+	dataSync?: SyncConfig<T["infer"]>;
 };
 
 type SingleFilter<T> = Partial<{
@@ -128,4 +129,22 @@ export type SearchListResult<T> = {
 	data: T[];
 	nextCursor: string | null;
 	total: number;
+};
+
+export type SyncConfig<T> = {
+	getAllIds: () => Promise<string[]>;
+	getItems: (ids: string[]) => Promise<T[]>;
+	chunkSize?: number;
+};
+
+export type SyncOptions = {
+	ids?: string[];
+	purge?: boolean;
+	chunkSize?: number;
+};
+
+export type SyncResult = {
+	upserted: number;
+	deleted: number;
+	failed: number;
 };

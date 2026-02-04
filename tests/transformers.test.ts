@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type } from "arktype";
 import type { FieldTransformer } from "../src/index";
 import { DateTransformer, defaultTransformers, TSense } from "../src/index";
+import { connection } from "./config";
 
 const PostSchema = type({
 	id: "string",
@@ -13,12 +14,7 @@ const PostSchema = type({
 const PostsCollection = new TSense({
 	name: "posts_test",
 	schema: PostSchema,
-	connection: {
-		host: "127.0.0.1",
-		port: 8108,
-		protocol: "http",
-		apiKey: "123",
-	},
+	connection,
 	defaultSearchField: "title",
 });
 
@@ -233,12 +229,7 @@ describe("custom transformers", () => {
 		const CustomCollection = new TSense({
 			name: "custom_test",
 			schema: CustomSchema,
-			connection: {
-				host: "127.0.0.1",
-				port: 8108,
-				protocol: "http",
-				apiKey: "123",
-			},
+			connection,
 			transformers: [
 				...defaultTransformers,
 				BigIntTransformer,

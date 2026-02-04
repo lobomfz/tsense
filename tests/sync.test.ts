@@ -2,15 +2,9 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { type } from "arktype";
 import redaxios from "redaxios";
 import { TSense } from "../src/index";
+import { connection } from "./config";
 
 const axios = (redaxios as { default?: typeof redaxios }).default ?? redaxios;
-
-const connection = {
-	host: "127.0.0.1",
-	port: 8108,
-	protocol: "http" as const,
-	apiKey: "123",
-};
 
 const baseURL = `${connection.protocol}://${connection.host}:${connection.port}`;
 const headers = { "X-TYPESENSE-API-KEY": connection.apiKey };
@@ -56,7 +50,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await collection.sync();
+		await collection.syncSchema();
 
 		const remote = await getCollection(collectionName);
 		expect(remote).not.toBeNull();
@@ -78,8 +72,8 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await collection.sync();
-		await collection.sync();
+		await collection.syncSchema();
+		await collection.syncSchema();
 
 		const remote = await getCollection(collectionName);
 		expect(remote).not.toBeNull();
@@ -98,7 +92,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await initialCollection.sync();
+		await initialCollection.syncSchema();
 
 		const updatedSchema = type({
 			"id?": "string",
@@ -113,7 +107,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await updatedCollection.sync();
+		await updatedCollection.syncSchema();
 
 		const remote = await getCollection(collectionName);
 		expect(remote?.fields.some((f) => f.name === "email")).toBe(true);
@@ -133,7 +127,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await initialCollection.sync();
+		await initialCollection.syncSchema();
 
 		const updatedSchema = type({
 			"id?": "string",
@@ -147,7 +141,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await updatedCollection.sync();
+		await updatedCollection.syncSchema();
 
 		const remote = await getCollection(collectionName);
 		expect(remote?.fields.some((f) => f.name === "email")).toBe(false);
@@ -170,7 +164,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await initialCollection.sync();
+		await initialCollection.syncSchema();
 
 		const updatedSchema = type({
 			"id?": "string",
@@ -188,7 +182,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await updatedCollection.sync();
+		await updatedCollection.syncSchema();
 
 		const remote = await getCollection(collectionName);
 		const countField = remote?.fields.find((f) => f.name === "count");
@@ -211,7 +205,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await initialCollection.sync();
+		await initialCollection.syncSchema();
 
 		await initialCollection.upsert({ id: "1", name: "test", count: 10 });
 
@@ -230,7 +224,7 @@ describe("sync", () => {
 			defaultSearchField: "name",
 		});
 
-		await updatedCollection.sync();
+		await updatedCollection.syncSchema();
 
 		const remote = await getCollection(collectionName);
 		const countField = remote?.fields.find((f) => f.name === "count");
@@ -257,7 +251,7 @@ describe("autoSync", () => {
 			schema,
 			connection,
 			defaultSearchField: "name",
-			autoSync: true,
+			autoSyncSchema: true,
 		});
 
 		const beforeSync = await getCollection(collectionName);
@@ -281,7 +275,7 @@ describe("autoSync", () => {
 			schema,
 			connection,
 			defaultSearchField: "name",
-			autoSync: true,
+			autoSyncSchema: true,
 		});
 
 		await collection.upsert({ id: "1", name: "First" });
@@ -305,7 +299,7 @@ describe("autoSync", () => {
 			defaultSearchField: "name",
 		});
 
-		await collection.sync();
+		await collection.syncSchema();
 
 		const remote = await getCollection(collectionName);
 		expect(remote).not.toBeNull();

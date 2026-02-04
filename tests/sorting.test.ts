@@ -130,4 +130,30 @@ describe("sorting", () => {
 			expect(result.data[i].name >= result.data[i - 1].name).toBe(true);
 		}
 	});
+
+	it("should sort by optional string field (email asc)", async () => {
+		const result = await collection.search({
+			sortBy: ["email:asc"],
+			limit: 10,
+		});
+
+		expect(result.data.length).toBeGreaterThan(0);
+		expect(result.data[0].email).toBe("alice@example.com");
+
+		// Verify alphabetical ordering
+		for (let i = 1; i < result.data.length; i++) {
+			const prev = result.data[i - 1].email;
+			const curr = result.data[i].email;
+			if (prev && curr) {
+				expect(curr >= prev).toBe(true);
+			}
+		}
+	});
+
+	it("should generate sort: true for optional string fields with configure", () => {
+		const emailField = collection.fields.find((f) => f.name === "email");
+		expect(emailField).toBeDefined();
+		expect(emailField?.optional).toBe(true);
+		expect(emailField?.sort).toBe(true);
+	});
 });

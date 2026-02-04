@@ -42,8 +42,8 @@
 		"@changesets/cli": "^2.29.7",
 		"@types/bun": "latest",
 		"arktype": "^2.1.29",
-		"oxfmt": "^0.27.0",
-		"oxlint": "^1.42.0"
+		"oxfmt": "^0.28.0",
+		"oxlint": "^1.43.0"
 	},
 	"peerDependencies": {
 		"arktype": "^2.1.29",
