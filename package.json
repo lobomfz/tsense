@@ -1,6 +1,6 @@
 {
 	"name": "tsense",
-	"version": "0.0.14",
+	"version": "0.0.16",
 	"private": false,
 	"description": "Opinionated, fully typed typesense client",
 	"keywords": [
@@ -28,7 +28,7 @@
 		"build": "tsc",
 		"ci": "bun run build && bun run format && bun run check-exports",
 		"test": "bun test",
-		"format": "biome check --write",
+		"format": "oxfmt check --write src tests",
 		"check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
 		"local-release": "changeset version && changeset publish",
 		"prepublishOnly": "bun run ci"

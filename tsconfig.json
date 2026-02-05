@@ -1,24 +1,24 @@
 {
-	"compilerOptions": {
-		"lib": ["ES2015"],
-		"esModuleInterop": true,
-		"skipLibCheck": true,
-		"target": "ES2015",
-		"allowJs": true,
-		"resolveJsonModule": true,
-		"moduleDetection": "force",
-		"isolatedModules": true,
-		"verbatimModuleSyntax": true,
+  "compilerOptions": {
+    "lib": ["ES2015"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ES2015",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
 
-		"strict": true,
-		"noUncheckedIndexedAccess": true,
-		"noImplicitOverride": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
 
-		"module": "NodeNext",
-		"outDir": "dist",
-		"rootDir": "src",
+    "module": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src",
 
-		"declaration": true
-	},
-	"include": ["src/**/*.ts"]
+    "declaration": true
+  },
+  "include": ["src/**/*.ts"]
 }

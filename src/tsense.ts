@@ -10,10 +10,12 @@ import type {
   FieldSchema,
   FilterFor,
   HighlightOptions,
+  ProjectSearch,
   SearchApiResponse,
   SearchListOptions,
   SearchListResult,
   SearchOptions,
+  SearchOptionsPlain,
   SearchResult,
   SyncConfig,
   SyncOptions,
@@ -399,7 +401,9 @@ export class TSense<T extends Type> {
     return { updated: result.num_updated };
   }
 
-  async search(options: SearchOptions<T["infer"]>): Promise<SearchResult<T["infer"]>> {
+  async search<const O extends SearchOptions<T["infer"]> = SearchOptionsPlain<T["infer"]>>(
+    options: O,
+  ): Promise<SearchResult<ProjectSearch<T["infer"], O>>> {
     await this.ensureSynced();
 
     const params: Record<string, unknown> = {
@@ -422,11 +426,11 @@ export class TSense<T extends Type> {
     if (facetBy) params.facet_by = facetBy;
 
     if ("pick" in options && options.pick) {
-      params.include_fields = (options.pick as string[]).join(",");
+      params.include_fields = (options.pick as readonly string[]).join(",");
     }
 
     if ("omit" in options && options.omit) {
-      params.exclude_fields = (options.omit as string[]).join(",");
+      params.exclude_fields = (options.omit as readonly string[]).join(",");
     }
 
     const highlight = options.highlight;
@@ -491,7 +495,7 @@ export class TSense<T extends Type> {
       data,
       facets,
       scores,
-    };
+    } as SearchResult<ProjectSearch<T["infer"], O>>;
   }
 
   async searchList(options: SearchListOptions<T["infer"]>): Promise<SearchListResult<T["infer"]>> {
@@ -647,7 +651,7 @@ export class TSense<T extends Type> {
     return deleted;
   }
 
-  private async exportIds(): Promise<string[]> {
+  async exportIds(): Promise<string[]> {
     const { data } = await this.axios<string>({
       method: "GET",
       url: `/collections/${this.options.name}/documents/export`,

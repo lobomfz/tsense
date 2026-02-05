@@ -89,20 +89,20 @@ type("string").configure({
 
 ### Collection Methods
 
-| Method/Property | Description |
-| --------------- | ----------- |
-| `create()` | Creates the collection in Typesense |
-| `drop()` | Deletes the collection |
-| `get(id)` | Retrieves a document by ID |
-| `delete(id)` | Deletes a document by ID |
-| `deleteMany(filter)` | Deletes documents matching filter |
-| `update(id, data)` | Updates a document by ID |
-| `updateMany(filter, data)` | Updates documents matching filter |
-| `upsert(docs)` | Inserts or updates documents |
-| `search(options)` | Searches the collection |
-| `syncSchema()` | Syncs schema (creates/patches collection) |
-| `syncData(options)` | Syncs data from external source |
-| `fields` | Array of generated field schemas |
+| Method/Property            | Description                               |
+| -------------------------- | ----------------------------------------- |
+| `create()`                 | Creates the collection in Typesense       |
+| `drop()`                   | Deletes the collection                    |
+| `get(id)`                  | Retrieves a document by ID                |
+| `delete(id)`               | Deletes a document by ID                  |
+| `deleteMany(filter)`       | Deletes documents matching filter         |
+| `update(id, data)`         | Updates a document by ID                  |
+| `updateMany(filter, data)` | Updates documents matching filter         |
+| `upsert(docs)`             | Inserts or updates documents              |
+| `search(options)`          | Searches the collection                   |
+| `syncSchema()`             | Syncs schema (creates/patches collection) |
+| `syncData(options)`        | Syncs data from external source           |
+| `fields`                   | Array of generated field schemas          |
 
 ### Schema Sync
 
@@ -130,7 +130,11 @@ const Collection = new TSense({
   // ...
   dataSync: {
     getAllIds: async () => {
-      return db.selectFrom("users").select("id").execute().then(rows => rows.map(r => r.id));
+      return db
+        .selectFrom("users")
+        .select("id")
+        .execute()
+        .then((rows) => rows.map((r) => r.id));
     },
     getItems: async (ids) => {
       return db.selectFrom("users").where("id", "in", ids).execute();
