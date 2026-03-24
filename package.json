@@ -1,6 +1,6 @@
 {
 	"name": "tsense",
-	"version": "0.0.16",
+	"version": "0.1.0",
 	"private": false,
 	"description": "Opinionated, fully typed typesense client",
 	"keywords": [
@@ -25,7 +25,7 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "tsgo",
 		"ci": "bun run build && bun run format && bun run check-exports",
 		"test": "bun test",
 		"format": "oxfmt check --write src tests",
@@ -38,15 +38,14 @@
 	},
 	"devDependencies": {
 		"@arethetypeswrong/cli": "^0.18.2",
-		"@biomejs/biome": "2.1.4",
-		"@changesets/cli": "^2.29.7",
+		"@changesets/cli": "^2.30.0",
 		"@types/bun": "latest",
-		"arktype": "^2.1.29",
-		"oxfmt": "^0.28.0",
-		"oxlint": "^1.43.0"
+		"@typescript/native-preview": "^7.0.0-dev.20260324.1",
+		"arktype": "^2.2.0",
+		"oxfmt": "^0.42.0",
+		"oxlint": "^1.57.0"
 	},
 	"peerDependencies": {
-		"arktype": "^2.1.29",
-		"typescript": "^5"
+		"arktype": "^2.1.29"
 	}
 }

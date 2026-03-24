@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "lib": ["ES2015"],
+    "lib": ["ESNext"],
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "target": "ES2015",
+    "target": "ESNext",
     "allowJs": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",
