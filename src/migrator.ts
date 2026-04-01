@@ -12,12 +12,12 @@ type CollectionResponse = {
 };
 
 const COMPARABLE_KEYS = ["type", "facet", "sort", "index", "optional"] as const;
-const NESTED_TYPES = ["object", "object[]"];
+const NESTED_TYPES = new Set(["object", "object[]"]);
 
 export class TSenseMigrator {
   constructor(
     private collectionName: string,
-    private localFields: FieldSchema[],
+    private localFields: readonly FieldSchema[],
     private defaultSortingField: string | undefined,
     private axios: AxiosInstance,
   ) {}
@@ -136,7 +136,9 @@ export class TSenseMigrator {
   }
 
   private async create(): Promise<void> {
-    const enable_nested_fields = this.localFields.some((f) => NESTED_TYPES.includes(f.type));
+    const enable_nested_fields = this.localFields.some((f) =>
+      NESTED_TYPES.has(f.type),
+    );
 
     await this.axios({
       method: "POST",

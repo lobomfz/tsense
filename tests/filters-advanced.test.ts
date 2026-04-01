@@ -5,7 +5,6 @@ beforeAll(async () => {
   await collection.drop().catch(() => null);
   await collection.create();
 
-  // Seed test data
   await collection.upsert([
     {
       id: "1",
@@ -57,22 +56,23 @@ describe("advanced filtering", () => {
     });
 
     expect(result.count).toBe(2);
+
     const names = result.data.map((d) => d.name).sort();
     expect(names).toEqual(["Alice Williams", "Frank White"]);
   });
 
-  it("should filter by range with min == max (exact match)", async () => {
+  it("should filter by range with gte == lte (exact match)", async () => {
     const result = await collection.search({
-      filter: { age: { min: 30, max: 30 } },
+      filter: { age: { gte: 30, lte: 30 } },
     });
 
     expect(result.count).toBe(1);
     expect(result.data[0].age).toBe(30);
   });
 
-  it("should return empty results when min > max", async () => {
+  it("should return empty results when gte > lte", async () => {
     const result = await collection.search({
-      filter: { age: { min: 50, max: 20 } },
+      filter: { age: { gte: 50, lte: 20 } },
     });
 
     expect(result.count).toBe(0);
@@ -87,7 +87,6 @@ describe("advanced filtering", () => {
       },
     });
 
-    // Should get Alice (22) and Frank (45), but not Eva (45)
     expect(result.count).toBeGreaterThanOrEqual(2);
 
     for (const doc of result.data) {
@@ -104,7 +103,6 @@ describe("advanced filtering", () => {
       },
     });
 
-    // Should only filter by name, ignoring undefined age
     expect(result.count).toBe(1);
     expect(result.data[0].name).toBe("David Lee");
   });
@@ -113,24 +111,25 @@ describe("advanced filtering", () => {
     const result = await collection.search({
       filter: {
         OR: [
-          { age: 22 }, // Alice
+          { age: 22 },
           {
-            OR: [
-              { age: 40, name: "David" }, // David
-              { age: 45 }, // Eva and Frank
-            ],
+            OR: [{ age: 40, name: "David Lee" }, { age: 45 }],
           },
         ],
       },
     });
 
-    // Should get Alice (22), David (40), Eva (45), and Frank (45)
     expect(result.count).toBe(4);
 
     const ages = result.data.map((d) => d.age).sort();
     expect(ages).toEqual([22, 40, 45, 45]);
 
     const names = result.data.map((d) => d.name).sort();
-    expect(names).toEqual(["Alice Williams", "David Lee", "Eva Martinez", "Frank White"]);
+    expect(names).toEqual([
+      "Alice Williams",
+      "David Lee",
+      "Eva Martinez",
+      "Frank White",
+    ]);
   });
 });

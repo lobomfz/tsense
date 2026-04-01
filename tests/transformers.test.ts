@@ -30,7 +30,7 @@ afterAll(async () => {
 describe("DateTransformer", () => {
   describe("match", () => {
     it("should match Date expression", () => {
-      expect(DateTransformer.match("Date", undefined)).toBe(true);
+      expect(DateTransformer.match("Date")).toBe(true);
     });
 
     it("should match Date domain", () => {
@@ -38,11 +38,11 @@ describe("DateTransformer", () => {
     });
 
     it("should not match string", () => {
-      expect(DateTransformer.match("string", undefined)).toBe(false);
+      expect(DateTransformer.match("string")).toBe(false);
     });
 
     it("should not match number", () => {
-      expect(DateTransformer.match("number", undefined)).toBe(false);
+      expect(DateTransformer.match("number")).toBe(false);
     });
   });
 
@@ -108,7 +108,7 @@ describe("TSense with Date fields", () => {
 
     const { data } = await PostsCollection.search({
       filter: {
-        created_at: { min: yesterday, max: tomorrow },
+        created_at: { gte: yesterday, lte: tomorrow },
       },
     });
 
@@ -194,7 +194,7 @@ describe("TSense with Date fields", () => {
     ]);
 
     const page1 = await PostsCollection.searchList({
-      sort: { field: "created_at", direction: "asc" },
+      sortBy: "created_at:asc",
       limit: 2,
     });
 
@@ -202,7 +202,7 @@ describe("TSense with Date fields", () => {
     expect(page1.nextCursor).not.toBeNull();
 
     const page2 = await PostsCollection.searchList({
-      sort: { field: "created_at", direction: "asc" },
+      sortBy: "created_at:asc",
       limit: 2,
       cursor: page1.nextCursor!,
     });
@@ -218,7 +218,7 @@ describe("custom transformers", () => {
       match: (expr) => expr === "bigint",
       storageType: "string",
       serialize: (n) => n.toString(),
-      deserialize: (s) => BigInt(s),
+      deserialize: BigInt,
     };
 
     const CustomSchema = type({
@@ -230,7 +230,10 @@ describe("custom transformers", () => {
       name: "custom_test",
       schema: CustomSchema,
       connection,
-      transformers: [...defaultTransformers, BigIntTransformer] as FieldTransformer[],
+      transformers: [
+        ...defaultTransformers,
+        BigIntTransformer,
+      ] as FieldTransformer[],
     });
 
     expect(CustomCollection).toBeDefined();

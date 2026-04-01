@@ -1,6 +1,6 @@
 import { type } from "arktype";
-import { TSense } from "../src/index";
-import { connection } from "./config";
+import { TSense } from "../src/index.js";
+import { connection } from "./config.js";
 
 const UserSchema = type({
   "id?": "string",
@@ -20,6 +20,7 @@ const UserSchema = type({
     index: true,
   }),
   "phone?": "string",
+  "created_at?": "Date",
   name: type("string").configure({
     type: "string",
     facet: false,

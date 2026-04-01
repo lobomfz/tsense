@@ -46,15 +46,15 @@ describe("pick option", () => {
     expect(result.count).toBeGreaterThan(0);
     const doc = result.data[0];
     expect(doc.name).toBe("Alice Johnson");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.id).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.email).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.age).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.company).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.phone).toBeUndefined();
   });
 
@@ -69,11 +69,11 @@ describe("pick option", () => {
     expect(doc.name).toBe("Bob Smith");
     expect(doc.email).toBe("bob@example.com");
     expect(doc.age).toBe(35);
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.id).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.company).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.phone).toBeUndefined();
   });
 
@@ -87,9 +87,9 @@ describe("pick option", () => {
     const doc = result.data[0];
     expect(doc.id).toBe("1");
     expect(doc.name).toBe("Alice Johnson");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.email).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.age).toBeUndefined();
   });
 
@@ -103,7 +103,7 @@ describe("pick option", () => {
     expect(result.count).toBeGreaterThan(0);
     const doc = result.data[0];
     expect(doc.name).toContain("<mark>Alice</mark>");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.email).toBeUndefined();
   });
 });
@@ -122,7 +122,7 @@ describe("omit option", () => {
     expect(doc.email).toBe("alice@example.com");
     expect(doc.company).toBe("netflix");
     expect(doc.phone).toBe("555-1234");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.age).toBeUndefined();
   });
 
@@ -137,11 +137,11 @@ describe("omit option", () => {
     expect(doc.id).toBe("2");
     expect(doc.name).toBe("Bob Smith");
     expect(doc.email).toBe("bob@example.com");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.age).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.company).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.phone).toBeUndefined();
   });
 
@@ -155,9 +155,9 @@ describe("omit option", () => {
     expect(result.count).toBeGreaterThan(0);
     const doc = result.data[0];
     expect(doc.name).toContain("<mark>Alice</mark>");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.age).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.company).toBeUndefined();
   });
 });
@@ -244,11 +244,11 @@ describe("combined options", () => {
     const doc = result.data[0];
     expect(doc.name).toContain("<b>Alice</b>");
     expect(doc.email).toBe("alice@example.com");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.id).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.age).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.company).toBeUndefined();
   });
 
@@ -268,9 +268,9 @@ describe("combined options", () => {
     expect(doc.name).toContain("<i>Bob</i>");
     expect(doc.email).toBe("bob@example.com");
     expect(doc.company).toBe("google");
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.age).toBeUndefined();
-    // @ts-expect-error
+    // @ts-expect-error - field excluded by pick/omit
     expect(doc.phone).toBeUndefined();
   });
 
@@ -285,9 +285,9 @@ describe("combined options", () => {
     expect(result.count).toBe(2);
     for (const doc of result.data) {
       expect(doc.company).toBe("netflix");
-      // @ts-expect-error
+      // @ts-expect-error - field excluded by pick/omit
       expect(doc.email).toBeUndefined();
-      // @ts-expect-error
+      // @ts-expect-error - field excluded by pick/omit
       expect(doc.age).toBeUndefined();
     }
   });

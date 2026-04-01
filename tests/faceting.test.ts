@@ -76,7 +76,7 @@ describe("faceting", () => {
     const result = await collection.search({
       filter: {
         age: {
-          min: 30,
+          gte: 30,
         },
       },
       facetBy: ["company"],

@@ -1,6 +1,5 @@
 import type { Type } from "arktype";
 import redaxios from "redaxios";
-
 import type { TsenseFieldMeta, TsenseFieldType } from "./env.js";
 import { TSenseMigrator } from "./migrator.js";
 import { defaultTransformers } from "./transformers/defaults.js";
@@ -9,8 +8,8 @@ import type {
   DeleteResult,
   FieldSchema,
   FilterFor,
-  HighlightOptions,
   ProjectSearch,
+  ScopedCollection,
   SearchApiResponse,
   SearchListOptions,
   SearchListResult,
@@ -35,6 +34,28 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 
 const redaxiosInstance = redaxios.default ?? redaxios;
 
+function escapeFilterValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return `\`${value.replaceAll("`", "")}\``;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(escapeFilterValue);
+  }
+
+  return value;
+}
+
+const filterOperators: Record<string, (key: string, value: unknown) => string> =
+  {
+    not: (k, v) => `${k}:!=${v}`,
+    gt: (k, v) => `${k}:>${v}`,
+    gte: (k, v) => `${k}:>=${v}`,
+    lt: (k, v) => `${k}:<${v}`,
+    lte: (k, v) => `${k}:<=${v}`,
+    notIn: (k, v) => `${k}:!=[${(v as unknown[]).join(",")}]`,
+  };
+
 const arkToTsense: Record<string, TsenseFieldMeta["type"]> = {
   string: "string",
   number: "float",
@@ -49,7 +70,7 @@ const arkToTsense: Record<string, TsenseFieldMeta["type"]> = {
 export type AxiosInstance = ReturnType<typeof redaxiosInstance.create>;
 
 export class TSense<T extends Type> {
-  fields: FieldSchema[] = [];
+  readonly fields: readonly FieldSchema[] = [];
   private axios: AxiosInstance;
   private synced = false;
   private fieldTransformers = new Map<string, FieldTransformer>();
@@ -57,17 +78,15 @@ export class TSense<T extends Type> {
 
   infer: T["infer"] = undefined;
 
-  getFields() {
-    return this.fields;
-  }
-
   constructor(private options: TsenseOptions<T>) {
     this.axios = redaxiosInstance.create({
       baseURL: `${options.connection.protocol}://${options.connection.host}:${options.connection.port}`,
       headers: { "X-TYPESENSE-API-KEY": options.connection.apiKey },
     });
 
-    this.extractFields(options.transformers ?? defaultTransformers);
+    this.fields = this.extractFields(
+      options.transformers ?? defaultTransformers,
+    );
     this.dataSyncConfig = options.dataSync;
   }
 
@@ -118,19 +137,27 @@ export class TSense<T extends Type> {
       return value.map((v) => transformer.serialize(v));
     }
 
-    if (typeof value === "object" && value !== null) {
-      const v = value as Record<string, unknown>;
-      const isFilterObject = "min" in v || "max" in v || "not" in v;
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      Object.getPrototypeOf(value) === Object.prototype
+    ) {
+      const result: Record<string, unknown> = {};
 
-      if (!isFilterObject) {
-        return transformer.serialize(value);
+      for (const [opKey, opValue] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        if (opValue == null) {
+          result[opKey] = opValue;
+          continue;
+        }
+
+        if (Array.isArray(opValue)) {
+          result[opKey] = opValue.map((item) => transformer.serialize(item));
+        } else {
+          result[opKey] = transformer.serialize(opValue);
+        }
       }
-
-      const result = { ...v };
-
-      if ("min" in v && v.min != null) result.min = transformer.serialize(v.min);
-      if ("max" in v && v.max != null) result.max = transformer.serialize(v.max);
-      if ("not" in v && v.not != null) result.not = transformer.serialize(v.not);
 
       return result;
     }
@@ -148,15 +175,29 @@ export class TSense<T extends Type> {
             expression: string;
             domain?: string;
             meta?: unknown;
-            branches?: { domain?: string; meta?: unknown }[];
+            branches?: { domain?: string; meta?: unknown; unit?: unknown }[];
           };
         }[];
       };
     };
 
+    const fields: FieldSchema[] = [];
+
     for (const prop of internal.structure.props) {
-      const innerType = prop.value.branches?.[0] ?? prop.value;
-      const meta = (innerType.meta ?? prop.value.meta) as TsenseFieldMeta | undefined;
+      const branches = prop.value.branches ?? [];
+
+      const enumValues: string[] = [];
+
+      for (const branch of branches) {
+        if (typeof branch.unit === "string") {
+          enumValues.push(branch.unit);
+        }
+      }
+
+      const innerType = branches[0] ?? prop.value;
+      const meta = (innerType.meta ?? prop.value.meta) as
+        | TsenseFieldMeta
+        | undefined;
       const expression = String(prop.value.expression);
       const domain = prop.value.domain;
       const baseType = this.getBaseType(expression, domain);
@@ -167,28 +208,34 @@ export class TSense<T extends Type> {
 
       if (transformer) {
         this.fieldTransformers.set(prop.key, transformer);
-        this.fields.push({
+        fields.push({
           name: prop.key,
           type: transformer.storageType,
+          sourceExpression: expression,
           optional: prop.kind === "optional",
           facet: meta?.facet,
           sort: meta?.sort,
           index: meta?.index,
+          enumValues,
         });
         continue;
       }
 
       const type = meta?.type ?? this.inferType(baseType);
 
-      this.fields.push({
+      fields.push({
         name: prop.key,
         type,
+        sourceExpression: expression,
         optional: prop.kind === "optional",
         facet: meta?.facet,
         sort: meta?.sort,
         index: meta?.index,
+        enumValues,
       });
     }
+
+    return fields;
   }
 
   private async ensureSynced(force?: boolean): Promise<void> {
@@ -208,31 +255,41 @@ export class TSense<T extends Type> {
     await this.ensureSynced(true);
   }
 
-  private buildObjectFilter(key: string, value: unknown) {
-    if (Array.isArray(value)) {
-      return `(${key}:[${value.join(",")}])`;
+  private buildObjectFilter(
+    key: string,
+    value: Record<string, unknown>,
+  ): string[] {
+    if (value.gte != null && value.lte != null) {
+      const escaped = escapeFilterValue(value.gte);
+      const escapedLte = escapeFilterValue(value.lte);
+      const parts = [`${key}:[${escaped}..${escapedLte}]`];
+
+      for (const [op, opValue] of Object.entries(value)) {
+        if (op === "gte" || op === "lte" || opValue == null) continue;
+
+        const builder = filterOperators[op];
+
+        if (builder) {
+          parts.push(builder(key, escapeFilterValue(opValue)));
+        }
+      }
+
+      return parts;
     }
 
-    const v = value as { not?: unknown; min?: number; max?: number };
+    const parts: string[] = [];
 
-    if ("not" in v) {
-      return `${key}:!=${v.not}`;
+    for (const [op, opValue] of Object.entries(value)) {
+      if (opValue == null) continue;
+
+      const builder = filterOperators[op];
+
+      if (builder) {
+        parts.push(builder(key, escapeFilterValue(opValue)));
+      }
     }
 
-    const min = v.min ?? undefined;
-    const max = v.max ?? undefined;
-
-    if (min != null && max != null) {
-      return `${key}:[${min}..${max}]`;
-    }
-
-    if (max != null) {
-      return `${key}:<=${max}`;
-    }
-
-    if (min != null) {
-      return `${key}:>=${min}`;
-    }
+    return parts;
   }
 
   private buildFilter(filter: FilterFor<T["infer"]> | undefined): string[] {
@@ -244,36 +301,52 @@ export class TSense<T extends Type> {
       if (rawValue == null) continue;
 
       if (key === "OR") {
-        const orFilter: string[] = [];
+        const orParts: string[] = [];
 
         for (const condition of rawValue as FilterFor<T["infer"]>[]) {
           const inner = this.buildFilter(condition);
-          orFilter.push(`(${inner.join("||")})`);
+          orParts.push(`(${inner.join("&&")})`);
         }
 
-        result.push(`(${orFilter.join("||")})`);
+        result.push(`(${orParts.join("||")})`);
         continue;
       }
 
       const value = this.serializeFilterValue(key, rawValue);
+      const escaped = escapeFilterValue(value);
 
-      switch (typeof value) {
-        case "string":
-        case "number":
-        case "boolean":
-          result.push(`${key}:=${value}`);
-          break;
-        case "object": {
-          const built = this.buildObjectFilter(key, value);
-          if (built) result.push(built);
-          break;
-        }
-        default:
-          break;
+      if (
+        typeof escaped === "string" ||
+        typeof escaped === "number" ||
+        typeof escaped === "boolean"
+      ) {
+        result.push(`${key}:=${escaped}`);
+        continue;
+      }
+
+      if (Array.isArray(escaped)) {
+        result.push(`${key}:[${escaped.join(",")}]`);
+        continue;
+      }
+
+      if (typeof value === "object" && value !== null) {
+        result.push(
+          ...this.buildObjectFilter(key, value as Record<string, unknown>),
+        );
       }
     }
 
     return result;
+  }
+
+  private validateFields(fields: string[]) {
+    const valid = new Set(this.fields.map((f) => f.name));
+
+    for (const field of fields) {
+      if (field !== "score" && !valid.has(field)) {
+        throw new Error(`INVALID_FIELD: ${field}`);
+      }
+    }
   }
 
   private buildSort(options: SearchOptions<T["infer"]>) {
@@ -294,7 +367,9 @@ export class TSense<T extends Type> {
   }
 
   async create(): Promise<this> {
-    const enableNested = this.fields.some((f) => f.type === "object" || f.type === "object[]");
+    const enableNested = this.fields.some(
+      (f) => f.type === "object" || f.type === "object[]",
+    );
 
     await this.axios({
       method: "POST",
@@ -401,16 +476,34 @@ export class TSense<T extends Type> {
     return { updated: result.num_updated };
   }
 
-  async search<const O extends SearchOptions<T["infer"]> = SearchOptionsPlain<T["infer"]>>(
-    options: O,
-  ): Promise<SearchResult<ProjectSearch<T["infer"], O>>> {
+  async search<
+    const O extends SearchOptions<T["infer"]> = SearchOptionsPlain<T["infer"]>,
+  >(options: O): Promise<SearchResult<ProjectSearch<T["infer"], O>>> {
     await this.ensureSynced();
 
+    const queryByFields = (options.queryBy as string[]) ?? [
+      this.options.defaultSearchField as string,
+    ];
+
+    this.validateFields(queryByFields);
+
+    if (options.sortBy) {
+      this.validateFields(
+        (options.sortBy as string[])
+          .map((s) => s.split(":")[0]!)
+          .filter((f) => f !== "undefined"),
+      );
+    }
+
+    if (options.facetBy) {
+      this.validateFields(options.facetBy as string[]);
+    }
+
+    const queryBy = queryByFields.join(",");
+
     const params: Record<string, unknown> = {
-      q: options.query ?? "",
-      query_by: ((options.queryBy as string[]) ?? [this.options.defaultSearchField as string]).join(
-        ",",
-      ),
+      q: options.query ?? "*",
+      query_by: queryBy,
     };
 
     const sortBy = this.buildSort(options);
@@ -434,14 +527,9 @@ export class TSense<T extends Type> {
     }
 
     const highlight = options.highlight;
+    const highlightOpts = typeof highlight === "object" ? highlight : undefined;
 
-    const highlightEnabled = !!highlight;
-
-    let highlightOpts: HighlightOptions<T["infer"]> | undefined;
-
-    if (typeof highlight === "object") {
-      highlightOpts = highlight;
-
+    if (highlightOpts) {
       if (highlightOpts.fields) {
         params.highlight_fields = (highlightOpts.fields as string[]).join(",");
       }
@@ -463,7 +551,7 @@ export class TSense<T extends Type> {
     const scores: number[] = [];
 
     for (const hit of res.hits ?? []) {
-      if (highlightEnabled) {
+      if (highlight) {
         const fieldsToHighlight = highlightOpts?.fields as string[] | undefined;
 
         for (const [key, value] of Object.entries(hit.highlight ?? {})) {
@@ -498,48 +586,28 @@ export class TSense<T extends Type> {
     } as SearchResult<ProjectSearch<T["infer"], O>>;
   }
 
-  async searchList(options: SearchListOptions<T["infer"]>): Promise<SearchListResult<T["infer"]>> {
-    await this.ensureSynced();
-
-    const limit = Math.min(options.limit ?? 20, 100);
-    const field = options.sort.field as string;
+  async searchList(
+    options: SearchListOptions<T["infer"]>,
+  ): Promise<SearchListResult<T["infer"]>> {
     const page = options.cursor ? Number(options.cursor) : 1;
+    const limit = Math.min(options.limit ?? 20, 100);
 
-    const params: Record<string, unknown> = {
-      q: options.query ?? "",
-      query_by: ((options.queryBy as string[]) ?? [this.options.defaultSearchField as string]).join(
-        ",",
-      ),
-      per_page: limit,
+    const result = await this.search({
+      query: options.query,
+      queryBy: options.queryBy,
+      filter: options.filter,
+      sortBy: [options.sortBy],
       page,
-      sort_by: `${field}:${options.sort.direction}`,
-    };
-
-    const filterParts = this.buildFilter(options.filter);
-
-    const filterBy = filterParts.join("&&");
-
-    if (filterBy) params.filter_by = filterBy;
-
-    const { data: res } = await this.axios<SearchApiResponse<T["infer"]>>({
-      method: "GET",
-      url: `/collections/${this.options.name}/documents/search`,
-      params,
+      limit,
     });
 
-    const hits = res.hits ?? [];
-    const data: T["infer"][] = [];
+    const hasMore = page * limit < result.count;
 
-    for (const hit of hits) {
-      const doc = this.deserializeDoc(hit.document as Record<string, unknown>);
-
-      data.push(doc);
-    }
-
-    const hasMore = page * limit < res.found;
-    const nextCursor = hasMore ? String(page + 1) : null;
-
-    return { data, nextCursor, total: res.found };
+    return {
+      data: result.data,
+      nextCursor: hasMore ? String(page + 1) : null,
+      total: result.count,
+    };
   }
 
   async count(filter?: FilterFor<T["infer"]>): Promise<number> {
@@ -556,15 +624,17 @@ export class TSense<T extends Type> {
       return data.num_documents;
     }
 
+    const params: Record<string, unknown> = {
+      q: "*",
+      query_by: this.options.defaultSearchField as string,
+      per_page: 0,
+      filter_by: filterBy,
+    };
+
     const { data } = await this.axios<{ found: number }>({
       method: "GET",
       url: `/collections/${this.options.name}/documents/search`,
-      params: {
-        q: "*",
-        query_by: this.options.defaultSearchField as string,
-        per_page: 0,
-        filter_by: filterBy,
-      },
+      params,
     });
 
     return data.found;
@@ -583,7 +653,9 @@ export class TSense<T extends Type> {
       }
     }
 
-    const payload = items.map((item) => JSON.stringify(this.serializeDoc(item))).join("\n");
+    const payload = items
+      .map((item) => JSON.stringify(this.serializeDoc(item)))
+      .join("\n");
 
     const params: Record<string, unknown> = { action: "upsert" };
 
@@ -611,7 +683,8 @@ export class TSense<T extends Type> {
       throw new Error("DATA_SYNC_NOT_CONFIGURED");
     }
 
-    const chunkSize = options?.chunkSize ?? this.dataSyncConfig.chunkSize ?? 500;
+    const chunkSize =
+      options?.chunkSize ?? this.dataSyncConfig.chunkSize ?? 500;
     const ids = options?.ids ?? (await this.dataSyncConfig.getAllIds());
 
     let upserted = 0;
@@ -635,7 +708,10 @@ export class TSense<T extends Type> {
     return { upserted, deleted, failed };
   }
 
-  private async purgeOrphans(validIds: string[], chunkSize: number): Promise<number> {
+  private async purgeOrphans(
+    validIds: string[],
+    chunkSize: number,
+  ): Promise<number> {
     const validSet = new Set(validIds);
     const remoteIds = await this.exportIds();
     const orphans = remoteIds.filter((id) => !validSet.has(id));
@@ -644,7 +720,9 @@ export class TSense<T extends Type> {
 
     let deleted = 0;
     for (const chunk of chunkArray(orphans, chunkSize)) {
-      const result = await this.deleteMany({ id: chunk } as FilterFor<T["infer"]>);
+      const result = await this.deleteMany({ id: chunk } as FilterFor<
+        T["infer"]
+      >);
       deleted += result.deleted;
     }
 
@@ -662,5 +740,36 @@ export class TSense<T extends Type> {
       .split("\n")
       .filter((line) => line.length)
       .map((line) => JSON.parse(line).id);
+  }
+
+  scoped(baseFilter: FilterFor<T["infer"]>): ScopedCollection<T["infer"]> {
+    return {
+      search: <
+        const O extends SearchOptions<T["infer"]> = SearchOptionsPlain<
+          T["infer"]
+        >,
+      >(
+        options: O,
+      ) =>
+        this.search({
+          ...options,
+          filter: { ...options.filter, ...baseFilter },
+        }),
+
+      searchList: (options: SearchListOptions<T["infer"]>) =>
+        this.searchList({
+          ...options,
+          filter: { ...options.filter, ...baseFilter },
+        }),
+
+      count: (filter?: FilterFor<T["infer"]>) =>
+        this.count({ ...filter, ...baseFilter }),
+
+      deleteMany: (filter: FilterFor<T["infer"]>) =>
+        this.deleteMany({ ...filter, ...baseFilter }),
+
+      updateMany: (filter: FilterFor<T["infer"]>, data: Partial<T["infer"]>) =>
+        this.updateMany({ ...filter, ...baseFilter }, data),
+    };
   }
 }

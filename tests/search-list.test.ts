@@ -21,7 +21,7 @@ afterAll(async () => {
 describe("searchList", () => {
   it("should return data and nextCursor on first page", async () => {
     const result = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
+      sortBy: "age:asc",
       limit: 2,
     });
 
@@ -31,12 +31,12 @@ describe("searchList", () => {
 
   it("should return different items with cursor", async () => {
     const page1 = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
+      sortBy: "age:asc",
       limit: 2,
     });
 
     const page2 = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
+      sortBy: "age:asc",
       limit: 2,
       cursor: page1.nextCursor!,
     });
@@ -47,18 +47,18 @@ describe("searchList", () => {
 
   it("should return nextCursor = null on last page", async () => {
     const page1 = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
+      sortBy: "age:asc",
       limit: 2,
     });
 
     const page2 = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
+      sortBy: "age:asc",
       limit: 2,
       cursor: page1.nextCursor!,
     });
 
     const page3 = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
+      sortBy: "age:asc",
       limit: 2,
       cursor: page2.nextCursor!,
     });
@@ -68,7 +68,7 @@ describe("searchList", () => {
 
   it("should sort asc correctly", async () => {
     const result = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
+      sortBy: "age:asc",
       limit: 5,
     });
 
@@ -79,7 +79,7 @@ describe("searchList", () => {
 
   it("should sort desc correctly", async () => {
     const result = await collection.searchList({
-      sort: { field: "age", direction: "desc" },
+      sortBy: "age:desc",
       limit: 5,
     });
 
@@ -90,8 +90,8 @@ describe("searchList", () => {
 
   it("should work with filter and cursor together", async () => {
     const page1 = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
-      filter: { age: { min: 25 } },
+      sortBy: "age:asc",
+      filter: { age: { gte: 25 } },
       limit: 2,
     });
 
@@ -99,8 +99,8 @@ describe("searchList", () => {
     expect(page1.nextCursor).not.toBeNull();
 
     const page2 = await collection.searchList({
-      sort: { field: "age", direction: "asc" },
-      filter: { age: { min: 25 } },
+      sortBy: "age:asc",
+      filter: { age: { gte: 25 } },
       limit: 2,
       cursor: page1.nextCursor!,
     });

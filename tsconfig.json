@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "esModuleInterop": true,
     "skipLibCheck": true,
     "target": "ESNext",
@@ -13,6 +13,8 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
+
+    "jsx": "react-jsx",
 
     "module": "NodeNext",
     "outDir": "dist",

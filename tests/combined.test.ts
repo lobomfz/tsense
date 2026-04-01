@@ -36,7 +36,7 @@ describe("combined operations", () => {
     const result = await collection.search({
       query: "example.com",
       queryBy: ["email"],
-      filter: { age: { min: 25 } },
+      filter: { age: { gte: 25 } },
       sortBy: ["age:asc"],
       limit: 10,
     });
@@ -49,7 +49,7 @@ describe("combined operations", () => {
 
   it("should filter and sort with pagination", async () => {
     const result = await collection.search({
-      filter: { age: { min: 25 } },
+      filter: { age: { gte: 25 } },
       sortBy: ["age:desc"],
       page: 1,
       limit: 5,

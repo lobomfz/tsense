@@ -1,0 +1,29 @@
+{
+  "name": "tsense-filter-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently 'bunx tsr watch' 'bun --watch src/server.ts'",
+    "seed": "bun seed.ts"
+  },
+  "dependencies": {
+    "@orpc/client": "^1",
+    "@orpc/server": "^1",
+    "@orpc/tanstack-query": "^1",
+    "@tanstack/react-query": "^5",
+    "@tanstack/react-router": "^1",
+    "arktype": "^2.2.0",
+    "react": "^19",
+    "react-dom": "^19",
+    "tailwindcss": "^4",
+    "tsense": "file:tsense-0.1.0.tgz"
+  },
+  "devDependencies": {
+    "@tanstack/router-cli": "^1",
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "bun-plugin-tailwind": "latest",
+    "concurrently": "^9"
+  }
+}

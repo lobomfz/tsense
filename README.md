@@ -1,168 +1,156 @@
 # TSense
 
-Opinionated, fully-typed Typesense client powered by [Arktype](https://arktype.io/)
+Fully-typed Typesense client powered by [Arktype](https://arktype.io/).
 
-## Installation
+Define your schema once. Get type-safe search, filtering, and automatic filter UIs — all from the same source of truth.
 
 ```bash
 bun add tsense arktype
 ```
 
-## Example
+## Define a collection
 
 ```typescript
 import { type } from "arktype";
 import { TSense } from "tsense";
 
-const UsersCollection = new TSense({
+const Users = new TSense({
   name: "users",
   schema: type({
     "id?": "string",
-    email: "string",
+    name: type("string").configure({ sort: true, index: true }),
     age: type("number.integer").configure({ type: "int32", sort: true }),
-    "company?": type.enumerated("netflix", "google").configure({ facet: true }),
-    "phone?": "string",
-    name: type("string").configure({ sort: true }),
-    "work_history?": type({
-      company: "string",
-      date: "string",
-    })
-      .array()
-      .configure({ type: "object[]", index: false }),
+    company: type.enumerated("netflix", "google", "apple").configure({ facet: true }),
+    active: type("boolean").configure({ facet: true }),
+    "joined_at?": "Date",
   }),
-  connection: {
-    host: "127.0.0.1",
-    port: 8108,
-    protocol: "http",
-    apiKey: "123",
-  },
+  connection: { host: "127.0.0.1", port: 8108, protocol: "http", apiKey: "xyz123" },
   defaultSearchField: "name",
-  validateOnUpsert: true,
 });
+```
 
-type User = typeof UsersCollection.infer;
+## Search with typed filters
 
-await UsersCollection.create();
+Operators are restricted per field type — the compiler catches invalid combinations.
 
-await UsersCollection.upsert([
-  { id: "1", email: "john@example.com", age: 30, name: "John Doe", company: "netflix" },
-  { id: "2", email: "jane@example.com", age: 25, name: "Jane Smith", company: "google" },
-]);
-
-const results = await UsersCollection.search({
-  query: "john",
-  queryBy: ["name", "email"],
-  sortBy: ["age:desc", "name:asc"],
+```typescript
+await Users.search({
   filter: {
-    age: { min: 20 },
-    OR: [{ company: "google" }, { company: "netflix" }],
+    age: { gte: 18, lte: 40 },
+    company: ["netflix", "google"],
+    name: { not: "admin" },
   },
 });
-
-const faceted = await UsersCollection.search({
-  query: "john",
-  facetBy: ["company"],
-});
-
-const highlighted = await UsersCollection.search({
-  query: "john",
-  highlight: true,
-});
-
-await UsersCollection.drop();
 ```
 
-## API Reference
-
-### Schema Configuration
-
-Use `.configure()` to set Typesense field options:
+## Paginated lists
 
 ```typescript
-type("string").configure({
-  type: "string",
-  facet: true,
-  sort: true,
-  index: true,
+const page1 = await Users.searchList({
+  sortBy: "age:asc",
+  filter: { active: true },
+  limit: 20,
+});
+
+const page2 = await Users.searchList({
+  sortBy: "age:asc",
+  filter: { active: true },
+  limit: 20,
+  cursor: page1.nextCursor!,
 });
 ```
 
-### Collection Methods
-
-| Method/Property            | Description                               |
-| -------------------------- | ----------------------------------------- |
-| `create()`                 | Creates the collection in Typesense       |
-| `drop()`                   | Deletes the collection                    |
-| `get(id)`                  | Retrieves a document by ID                |
-| `delete(id)`               | Deletes a document by ID                  |
-| `deleteMany(filter)`       | Deletes documents matching filter         |
-| `update(id, data)`         | Updates a document by ID                  |
-| `updateMany(filter, data)` | Updates documents matching filter         |
-| `upsert(docs)`             | Inserts or updates documents              |
-| `search(options)`          | Searches the collection                   |
-| `syncSchema()`             | Syncs schema (creates/patches collection) |
-| `syncData(options)`        | Syncs data from external source           |
-| `fields`                   | Array of generated field schemas          |
-
-### Schema Sync
-
-Automatically sync schema before the first operation:
+## Count
 
 ```typescript
-const Collection = new TSense({
-  // ...
-  autoSyncSchema: true,
-});
+const total = await Users.count();
+const active = await Users.count({ active: true });
 ```
 
-Or manually:
+## Multi-tenancy with scoped
+
+`scoped()` returns a narrowed instance where a base filter is merged into every operation. The caller cannot override it.
 
 ```typescript
-await Collection.syncSchema();
+const myUsers = Users.scoped({ owner_id: currentUser.id });
+
+await myUsers.search({ filter: { active: true } });
+// filter_by = "active:=true && owner_id:=`user-1`"
+
+await myUsers.count({ active: true });
+await myUsers.deleteMany({ active: false });
 ```
 
-### Data Sync
+## Build filter UIs from the schema
 
-Sync documents from an external source (database, API, etc.):
+Declare which fields are filterable. tsense introspects the arktype schema, detects enums, and produces a descriptor that travels to the frontend as JSON.
 
 ```typescript
-const Collection = new TSense({
-  // ...
-  dataSync: {
-    getAllIds: async () => {
-      return db
-        .selectFrom("users")
-        .select("id")
-        .execute()
-        .then((rows) => rows.map((r) => r.id));
-    },
-    getItems: async (ids) => {
-      return db.selectFrom("users").where("id", "in", ids).execute();
-    },
-    chunkSize: 100, // optional, default 500
+import { createFilterBuilder } from "tsense/filters";
+
+const filters = createFilterBuilder(Users, {
+  name: { label: "Name" },
+  age: {
+    label: "Age",
+    presets: { "Over 18": { age: { gte: 18 } } },
   },
+  company: {
+    label: "Company",
+    labels: { netflix: "Netflix", google: "Google", apple: "Apple" },
+  },
+  active: { label: "Active" },
+  joined_at: { label: "Joined At" },
 });
 
-// Full sync
-await Collection.syncData();
-
-// Partial sync (specific IDs)
-await Collection.syncData({ ids: ["id1", "id2"] });
-
-// Full sync + remove orphan documents
-await Collection.syncData({ purge: true });
-
-// Override chunk size
-await Collection.syncData({ chunkSize: 50 });
+const descriptor = filters.describe();
 ```
 
-### Filter Syntax
+## Render it
+
+Drop the descriptor into the React component. The user picks columns, conditions, and values. You get a typed `FilterFor<User>` back.
+
+```tsx
+import { FilterBuilder } from "tsense/react";
+
+<FilterBuilder descriptor={descriptor} onChange={(filter) => search(filter)} />
+```
+
+Every slot is replaceable via render props — or use the headless `useFilterBuilder` hook for full control.
+
+## Wire it end-to-end
+
+Backend validates input with the filter builder schema, scopes results by user, and exposes the descriptor. Frontend renders the builder and fires queries.
 
 ```typescript
-filter: { name: "John" }                    // Exact match
-filter: { age: 30 }                         // Numeric match
-filter: { age: [25, 30, 35] }               // IN
-filter: { age: { min: 20, max: 40 } }       // Range
-filter: { name: { not: "John" } }           // Not equal
-filter: { OR: [{ age: 25 }, { age: 30 }] }  // OR conditions
+// backend
+const filters = createFilterBuilder(Users, config);
+
+const authed = base.use(({ context, next }) => {
+  if (!context.user) throw new ORPCError("UNAUTHORIZED");
+  return next({ context: { user: context.user } });
+});
+
+const router = base.router({
+  search: authed
+    .input(filters.schema())
+    .handler(({ input, context }) =>
+      Users.scoped({ owner_id: context.user.id }).search(input)
+    ),
+});
 ```
+
+```tsx
+// frontend
+import { describe } from "./api/describe" with { type: "macro" };
+
+const descriptor = describe();
+const [filter, setFilter] = useState<typeof descriptor.infer>({});
+
+<FilterBuilder descriptor={descriptor} onChange={setFilter} />
+
+const { data: results } = useQuery(api.search, { filter });
+```
+
+The descriptor is inlined at build time via [Bun macros](https://bun.sh/docs/bundler/macros) — no RPC call needed.
+
+A working example with docker-compose, seed data, and a full UI lives in [`examples/`](./examples).

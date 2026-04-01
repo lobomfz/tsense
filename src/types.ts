@@ -6,10 +6,12 @@ type BaseIfArray<T> = T extends (infer Q)[] ? Q : T;
 export type FieldSchema = {
   name: string;
   type: string;
+  sourceExpression?: string;
   facet?: boolean;
   sort?: boolean;
   index?: boolean;
   optional?: boolean;
+  enumValues?: string[];
 };
 
 export type SearchHit<T> = {
@@ -48,16 +50,41 @@ export type TsenseOptions<T extends Type> = {
   dataSync?: SyncConfig<T["infer"]>;
 };
 
+export type StringFilter = {
+  not?: string;
+  notIn?: string[];
+};
+
+export type NumberFilter = {
+  not?: number;
+  notIn?: number[];
+  gt?: number;
+  gte?: number;
+  lt?: number;
+  lte?: number;
+};
+
+type DateFilter = {
+  not?: Date;
+  notIn?: Date[];
+  gt?: Date;
+  gte?: Date;
+  lt?: Date;
+  lte?: Date;
+};
+
+type FilterValueFor<T> = [T] extends [boolean]
+  ? boolean
+  : [T] extends [Date]
+    ? Date | Date[] | DateFilter
+    : [T] extends [number]
+      ? number | number[] | NumberFilter
+      : [T] extends [string]
+        ? T | T[] | StringFilter
+        : never;
+
 type SingleFilter<T> = Partial<{
-  [K in keyof T]:
-    | BaseIfArray<T[K]>
-    | NonNullable<BaseIfArray<T[K]>>[]
-    | { not?: BaseIfArray<T[K]> }
-    | (NonNullable<T[K]> extends number | Date
-        ? NonNullable<T[K]> extends infer Type
-          ? { min?: Type; max?: Type }
-          : never
-        : never);
+  [K in keyof T]: FilterValueFor<NonNullable<BaseIfArray<T[K]>>>;
 }>;
 
 export type FilterFor<T> = SingleFilter<T> & {
@@ -83,12 +110,18 @@ export type BaseSearchOptions<T> = {
   highlight?: boolean | HighlightOptions<T>;
 };
 
-export type SearchOptionsWithPick<T, K extends readonly (keyof T)[]> = BaseSearchOptions<T> & {
+export type SearchOptionsWithPick<
+  T,
+  K extends readonly (keyof T)[],
+> = BaseSearchOptions<T> & {
   pick: K;
   omit?: never;
 };
 
-export type SearchOptionsWithOmit<T, K extends readonly (keyof T)[]> = BaseSearchOptions<T> & {
+export type SearchOptionsWithOmit<
+  T,
+  K extends readonly (keyof T)[],
+> = BaseSearchOptions<T> & {
   omit: K;
   pick?: never;
 };
@@ -130,16 +163,18 @@ export type UpsertResult = {
   document?: unknown;
 };
 
-type SearchListSort<T> = {
-  field: keyof T;
-  direction: "asc" | "desc";
+export type SearchInput<T> = {
+  query?: string;
+  filter?: FilterFor<T>;
+  page?: number;
+  limit?: number;
 };
 
 export type SearchListOptions<T> = {
   query?: string;
   queryBy?: (keyof T)[];
   filter?: FilterFor<T>;
-  sort: SearchListSort<T>;
+  sortBy: `${Extract<keyof T, string>}:${"asc" | "desc"}`;
   limit?: number;
   cursor?: string;
 };
@@ -148,6 +183,16 @@ export type SearchListResult<T> = {
   data: T[];
   nextCursor: string | null;
   total: number;
+};
+
+export type ScopedCollection<T> = {
+  search: <const O extends SearchOptions<T> = SearchOptionsPlain<T>>(
+    options: O,
+  ) => Promise<SearchResult<ProjectSearch<T, O>>>;
+  searchList: (options: SearchListOptions<T>) => Promise<SearchListResult<T>>;
+  count: (filter?: FilterFor<T>) => Promise<number>;
+  deleteMany: (filter: FilterFor<T>) => Promise<DeleteResult>;
+  updateMany: (filter: FilterFor<T>, data: Partial<T>) => Promise<UpdateResult>;
 };
 
 export type SyncConfig<T> = {

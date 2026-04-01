@@ -19,6 +19,14 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./filters": {
+			"types": "./dist/filters/index.d.ts",
+			"import": "./dist/filters/index.js"
+		},
+		"./react": {
+			"types": "./dist/react/index.d.ts",
+			"import": "./dist/react/index.js"
 		}
 	},
 	"publishConfig": {
@@ -26,10 +34,11 @@
 	},
 	"scripts": {
 		"build": "tsgo",
+		"check": "bun run scripts/check.ts",
 		"ci": "bun run build && bun run format && bun run check-exports",
 		"test": "bun test",
 		"format": "oxfmt check --write src tests",
-		"check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
+		"check-exports": "attw --pack . --ignore-rules cjs-resolves-to-esm no-resolution",
 		"local-release": "changeset version && changeset publish",
 		"prepublishOnly": "bun run ci"
 	},
@@ -40,12 +49,22 @@
 		"@arethetypeswrong/cli": "^0.18.2",
 		"@changesets/cli": "^2.30.0",
 		"@types/bun": "latest",
+		"@types/node": "^25.5.0",
+		"@types/react": "^19.2.14",
 		"@typescript/native-preview": "^7.0.0-dev.20260324.1",
 		"arktype": "^2.2.0",
+		"jscpd": "^4.0.8",
 		"oxfmt": "^0.42.0",
-		"oxlint": "^1.57.0"
+		"oxlint": "^1.57.0",
+		"react": "^19.2.4"
 	},
 	"peerDependencies": {
-		"arktype": "^2.1.29"
+		"arktype": "^2.1.29",
+		"react": ">=18"
+	},
+	"peerDependenciesMeta": {
+		"react": {
+			"optional": true
+		}
 	}
 }

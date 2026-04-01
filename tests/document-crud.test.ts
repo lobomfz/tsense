@@ -150,7 +150,7 @@ describe("deleteMany", () => {
   });
 
   it("should delete by range filter", async () => {
-    const result = await collection.deleteMany({ age: { min: 65 } });
+    const result = await collection.deleteMany({ age: { gte: 65 } });
 
     expect(result.deleted).toBe(1);
 
@@ -198,7 +198,9 @@ describe("update", () => {
   });
 
   it("should throw when updating non-existing document", async () => {
-    await expect(collection.update("non-existent-id", { age: 99 })).rejects.toThrow();
+    await expect(
+      collection.update("non-existent-id", { age: 99 }),
+    ).rejects.toThrow();
   });
 });
 
@@ -240,7 +242,10 @@ describe("updateMany", () => {
   });
 
   it("should update by company filter", async () => {
-    const result = await collection.updateMany({ company: "netflix" }, { age: 90 });
+    const result = await collection.updateMany(
+      { company: "netflix" },
+      { age: 90 },
+    );
 
     expect(result.updated).toBeGreaterThanOrEqual(1);
 

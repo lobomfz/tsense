@@ -58,9 +58,9 @@ describe("filters", () => {
     expect(result.count).toBeGreaterThanOrEqual(2);
   });
 
-  it("should filter by range with min", async () => {
+  it("should filter by gte", async () => {
     const result = await collection.search({
-      filter: { age: { min: 40 } },
+      filter: { age: { gte: 40 } },
     });
 
     for (const doc of result.data) {
@@ -68,9 +68,9 @@ describe("filters", () => {
     }
   });
 
-  it("should filter by range with max", async () => {
+  it("should filter by lte", async () => {
     const result = await collection.search({
-      filter: { age: { max: 30 } },
+      filter: { age: { lte: 30 } },
     });
 
     for (const doc of result.data) {
@@ -78,9 +78,9 @@ describe("filters", () => {
     }
   });
 
-  it("should filter by range with min and max", async () => {
+  it("should filter by gte + lte range", async () => {
     const result = await collection.search({
-      filter: { age: { min: 25, max: 35 } },
+      filter: { age: { gte: 25, lte: 35 } },
     });
 
     for (const doc of result.data) {
@@ -89,13 +89,53 @@ describe("filters", () => {
     }
   });
 
-  it("should filter with not operator", async () => {
+  it("should filter with not on string", async () => {
     const result = await collection.search({
       filter: { name: { not: "David Lee" } },
     });
 
     for (const doc of result.data) {
       expect(doc.name).not.toBe("David Lee");
+    }
+  });
+
+  it("should filter with not on number", async () => {
+    const result = await collection.search({
+      filter: { age: { not: 22 } },
+    });
+
+    for (const doc of result.data) {
+      expect(doc.age).not.toBe(22);
+    }
+  });
+
+  it("should filter with gt", async () => {
+    const result = await collection.search({
+      filter: { age: { gt: 40 } },
+    });
+
+    for (const doc of result.data) {
+      expect(doc.age).toBeGreaterThan(40);
+    }
+  });
+
+  it("should filter with lt", async () => {
+    const result = await collection.search({
+      filter: { age: { lt: 40 } },
+    });
+
+    for (const doc of result.data) {
+      expect(doc.age).toBeLessThan(40);
+    }
+  });
+
+  it("should filter with notIn", async () => {
+    const result = await collection.search({
+      filter: { age: { notIn: [22, 40] } },
+    });
+
+    for (const doc of result.data) {
+      expect([22, 40]).not.toContain(doc.age);
     }
   });
 
@@ -112,7 +152,7 @@ describe("filters", () => {
   it("should combine multiple filters", async () => {
     const result = await collection.search({
       filter: {
-        age: { min: 20, max: 50 },
+        age: { gte: 20, lte: 50 },
         name: { not: "David Lee" },
       },
     });
