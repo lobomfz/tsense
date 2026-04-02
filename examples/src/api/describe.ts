@@ -1,5 +1,5 @@
-import { builder } from './collection'
+import { builder } from "./collection";
 
 export function describe() {
-  return builder.describe()
+  return builder.describe();
 }

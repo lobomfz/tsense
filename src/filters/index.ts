@@ -1,5 +1,6 @@
-import { type } from "arktype";
+export { deserializeFilter, serializeFilter } from "./url.js";
 import type { Type } from "arktype";
+import { type } from "arktype";
 import type { TsenseFieldType } from "../env.js";
 import type { TSense } from "../tsense.js";
 import type { FilterFor, SearchInput } from "../types.js";
@@ -19,7 +20,7 @@ export type FilterDescriptor<T = Record<string, unknown>> = {
 type FilterBuilderFieldConfig<T> = {
   label: string;
   labels?: Record<string, string>;
-  presets?: Record<string, FilterFor<T>>;
+  presets?: Record<string, FilterFor<T> | (() => FilterFor<T>)>;
 };
 
 type FilterBuilderReturn<T> = {
@@ -75,9 +76,16 @@ const conditionsByType: Record<ColumnType, Condition[]> = {
   ],
 };
 
+type FilterBuilderOptions = {
+  conditionLabels?: Partial<
+    Record<ColumnType | "enum", Partial<Record<string, string>>>
+  >;
+};
+
 export function createFilterBuilder<T extends Type>(
   collection: TSense<T>,
   config: { [K in keyof T["infer"]]?: FilterBuilderFieldConfig<T["infer"]> },
+  options?: FilterBuilderOptions,
 ): FilterBuilderReturn<T["infer"]> {
   const fields = collection.fields;
 
@@ -124,6 +132,22 @@ export function createFilterBuilder<T extends Type>(
     describe() {
       const columns: FilterDescriptor<T["infer"]>["columns"] = [];
 
+      const withLabels = (
+        conditions: Condition[],
+        typeKey: ColumnType | "enum",
+      ): Condition[] => {
+        const overrides = options?.conditionLabels?.[typeKey];
+
+        if (!overrides) {
+          return conditions;
+        }
+
+        return conditions.map((c) => ({
+          key: c.key,
+          label: overrides[c.key] ?? c.label,
+        }));
+      };
+
       for (const field of fields) {
         const fieldConfig = (
           config as Record<
@@ -145,7 +169,7 @@ export function createFilterBuilder<T extends Type>(
           key: field.name as keyof T["infer"] & string,
           label: fieldConfig.label,
           type: columnType,
-          conditions: conditionsByType[columnType],
+          conditions: withLabels(conditionsByType[columnType], columnType),
         };
 
         if (field.enumValues?.length) {
@@ -153,14 +177,16 @@ export function createFilterBuilder<T extends Type>(
             value: v,
             label: fieldConfig.labels?.[v] ?? v,
           }));
-          column.conditions = enumConditions;
+          column.conditions = withLabels(enumConditions, "enum");
         }
 
         if (fieldConfig.presets) {
           column.presets = Object.entries(fieldConfig.presets).map(
-            ([name, filter]) => ({
+            ([name, filterOrFn]) => ({
               name,
-              filter: filter as Record<string, unknown>,
+              filter: (typeof filterOrFn === "function"
+                ? filterOrFn()
+                : filterOrFn) as Record<string, unknown>,
             }),
           );
         }

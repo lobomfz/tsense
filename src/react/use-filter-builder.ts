@@ -12,6 +12,7 @@ import {
   setRowField,
   setRowValue,
   type FilterRow,
+  type FilterValue,
 } from "../filters/filter-state.js";
 import type { FilterDescriptor } from "../filters/index.js";
 
@@ -24,7 +25,7 @@ type UseFilterBuilderReturn = {
   remove: (index: number) => void;
   setField: (index: number, field: string) => void;
   setCondition: (index: number, condition: string) => void;
-  setValue: (index: number, value: unknown) => void;
+  setValue: (index: number, value: FilterValue) => void;
   clear: () => void;
   conditionsFor: (
     field: string,
@@ -59,7 +60,7 @@ export function useFilterBuilder<T>(
       setState((s) => setRowField(s, index, field)),
     setCondition: (index: number, condition: string) =>
       setState((s) => setRowCondition(s, index, condition)),
-    setValue: (index: number, value: unknown) =>
+    setValue: (index: number, value: FilterValue) =>
       setState((s) => setRowValue(s, index, value)),
     clear: () => setState(clearState),
     conditionsFor: (field: string) => conditionsFor(descriptor, field),

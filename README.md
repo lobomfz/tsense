@@ -20,11 +20,18 @@ const Users = new TSense({
     "id?": "string",
     name: type("string").configure({ sort: true, index: true }),
     age: type("number.integer").configure({ type: "int32", sort: true }),
-    company: type.enumerated("netflix", "google", "apple").configure({ facet: true }),
+    company: type
+      .enumerated("netflix", "google", "apple")
+      .configure({ facet: true }),
     active: type("boolean").configure({ facet: true }),
     "joined_at?": "Date",
   }),
-  connection: { host: "127.0.0.1", port: 8108, protocol: "http", apiKey: "xyz123" },
+  connection: {
+    host: "127.0.0.1",
+    port: 8108,
+    protocol: "http",
+    apiKey: "xyz123",
+  },
   defaultSearchField: "name",
 });
 ```
@@ -112,7 +119,7 @@ Drop the descriptor into the React component. The user picks columns, conditions
 ```tsx
 import { FilterBuilder } from "tsense/react";
 
-<FilterBuilder descriptor={descriptor} onChange={(filter) => search(filter)} />
+<FilterBuilder descriptor={descriptor} onChange={(filter) => search(filter)} />;
 ```
 
 Every slot is replaceable via render props — or use the headless `useFilterBuilder` hook for full control.
@@ -134,7 +141,7 @@ const router = base.router({
   search: authed
     .input(filters.schema())
     .handler(({ input, context }) =>
-      Users.scoped({ owner_id: context.user.id }).search(input)
+      Users.scoped({ owner_id: context.user.id }).search(input),
     ),
 });
 ```
@@ -146,7 +153,7 @@ import { describe } from "./api/describe" with { type: "macro" };
 const descriptor = describe();
 const [filter, setFilter] = useState<typeof descriptor.infer>({});
 
-<FilterBuilder descriptor={descriptor} onChange={setFilter} />
+<FilterBuilder descriptor={descriptor} onChange={setFilter} />;
 
 const { data: results } = useQuery(api.search, { filter });
 ```

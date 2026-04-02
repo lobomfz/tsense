@@ -1,10 +1,19 @@
 import type { FilterDescriptor } from "./index.js";
 
+export type FilterValue =
+  | string
+  | string[]
+  | number
+  | boolean
+  | Date
+  | [FilterValue | undefined, FilterValue | undefined]
+  | undefined;
+
 export type FilterRow = {
   id: number;
   field?: string;
   condition?: string;
-  value?: unknown;
+  value?: FilterValue;
 };
 
 type ScalarCondition = "equals" | "not_equals" | "gt" | "gte" | "lt" | "lte";
@@ -16,10 +25,20 @@ type CompleteFilterRow =
       id: number;
       field: string;
       condition: RangeCondition;
-      value: [unknown, unknown];
+      value: [FilterValue, FilterValue];
     }
-  | { id: number; field: string; condition: ArrayCondition; value: unknown[] }
-  | { id: number; field: string; condition: ScalarCondition; value: unknown };
+  | {
+      id: number;
+      field: string;
+      condition: ArrayCondition;
+      value: string[];
+    }
+  | {
+      id: number;
+      field: string;
+      condition: ScalarCondition;
+      value: FilterValue;
+    };
 
 export type FilterState = {
   rows: FilterRow[];
@@ -78,7 +97,7 @@ export function setRowCondition(
 export function setRowValue(
   state: FilterState,
   index: number,
-  value: unknown,
+  value: FilterValue,
 ): FilterState {
   return {
     rows: state.rows.map((row, i) => (i === index ? { ...row, value } : row)),
@@ -100,7 +119,7 @@ export function applyPreset<T>(
 
   if (!preset) return state;
 
-  const filterValue = preset.filter[field];
+  const filterValue = preset.filter[field] as FilterValue;
 
   if (filterValue == null) return state;
 
@@ -113,7 +132,7 @@ export function applyPreset<T>(
     };
   }
 
-  if (typeof filterValue !== "object") {
+  if (typeof filterValue !== "object" || filterValue instanceof Date) {
     return {
       rows: [
         ...state.rows,
@@ -122,7 +141,7 @@ export function applyPreset<T>(
     };
   }
 
-  const ops = filterValue as Record<string, unknown>;
+  const ops = filterValue as unknown as Record<string, FilterValue>;
   const keys = Object.keys(ops);
 
   if (keys.includes("gte") && keys.includes("lte")) {

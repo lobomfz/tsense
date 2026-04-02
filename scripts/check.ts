@@ -1,18 +1,17 @@
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { resolve, join } from 'node:path'
-
-import { $ } from 'bun'
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve, join } from "node:path";
+import { $ } from "bun";
 
 type CpdReport = {
   duplicates?: {
-    firstFile: { name: string; start: number; end: number }
-    secondFile: { name: string; start: number; end: number }
-    lines: number
-  }[]
-}
+    firstFile: { name: string; start: number; end: number };
+    secondFile: { name: string; start: number; end: number };
+    lines: number;
+  }[];
+};
 
-const ROOT = resolve(import.meta.dir, '..')
+const ROOT = resolve(import.meta.dir, "..");
 
 const changedFiles = new Set(
   (
@@ -21,78 +20,78 @@ const changedFiles = new Set(
       .text()
   )
     .trim()
-    .split('\n')
-    .filter((f) => f.startsWith('src/') && f.endsWith('.ts'))
-)
+    .split("\n")
+    .filter((f) => f.startsWith("src/") && f.endsWith(".ts")),
+);
 
 async function runTypes() {
-  const result = await $`tsgo -p tsconfig.check.json`.cwd(ROOT).nothrow()
+  const result = await $`tsgo -p tsconfig.check.json`.cwd(ROOT).nothrow();
 
   if (result.exitCode === 0) {
-    console.log('Type check passed.')
+    console.log("Type check passed.");
   }
 
-  return result.exitCode
+  return result.exitCode;
 }
 
 async function runLint() {
-  const result = await $`oxlint`.cwd(ROOT).nothrow()
-  return result.exitCode
+  const result = await $`oxlint`.cwd(ROOT).nothrow();
+  return result.exitCode;
 }
 
 async function runCpd() {
   if (changedFiles.size === 0) {
-    return 0
+    return 0;
   }
 
-  const outDir = mkdtempSync(join(tmpdir(), 'jscpd-'))
+  const outDir = mkdtempSync(join(tmpdir(), "jscpd-"));
 
   await $`jscpd --reporters json --output ${outDir}`
     .cwd(ROOT)
     .quiet()
-    .nothrow()
+    .nothrow();
 
   const report = (await Bun.file(
-    join(outDir, 'jscpd-report.json')
-  ).json()) as CpdReport
+    join(outDir, "jscpd-report.json"),
+  ).json()) as CpdReport;
 
   const relevantClones = (report.duplicates ?? []).filter(
     (d) =>
-      changedFiles.has(d.firstFile.name) || changedFiles.has(d.secondFile.name)
-  )
+      changedFiles.has(d.firstFile.name) || changedFiles.has(d.secondFile.name),
+  );
 
   if (relevantClones.length === 0) {
-    return 0
+    return 0;
   }
 
   console.error(
-    `\n[cpd] Found ${relevantClones.length} duplicate(s) involving changed files:\n`
-  )
+    `\n[cpd] Found ${relevantClones.length} duplicate(s) involving changed files:\n`,
+  );
 
   for (const clone of relevantClones) {
     console.error(
-      `  ${clone.firstFile.name} [lines ${clone.firstFile.start}-${clone.firstFile.end}]`
-    )
+      `  ${clone.firstFile.name} [lines ${clone.firstFile.start}-${clone.firstFile.end}]`,
+    );
     console.error(
-      `  ${clone.secondFile.name} [lines ${clone.secondFile.start}-${clone.secondFile.end}]`
-    )
-    console.error(`  ${clone.lines} lines duplicated\n`)
+      `  ${clone.secondFile.name} [lines ${clone.secondFile.start}-${clone.secondFile.end}]`,
+    );
+    console.error(`  ${clone.lines} lines duplicated\n`);
   }
 
-  return 1
+  return 1;
 }
 
 async function runKnip() {
-  const result = await $`bunx knip`.cwd(ROOT).nothrow()
-  return result.exitCode
+  const result = await $`bunx knip`.cwd(ROOT).nothrow();
+  return result.exitCode;
 }
 
 async function runTests() {
   const result = await $`bun test`
-    .env({ ...Bun.env, AGENT: '1' })
+    .env({ ...Bun.env, AGENT: "1" })
     .cwd(ROOT)
-    .nothrow()
-  return result.exitCode
+    .nothrow();
+  return result.exitCode;
 }
 
 const exits = await Promise.all([
@@ -101,6 +100,6 @@ const exits = await Promise.all([
   runKnip(),
   runCpd(),
   runTests(),
-])
+]);
 
-process.exit(exits.some((code) => code !== 0) ? 1 : 0)
+process.exit(exits.some((code) => code !== 0) ? 1 : 0);

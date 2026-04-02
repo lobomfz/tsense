@@ -9,4 +9,5 @@ export type {
   RowSlotProps,
   ValueInputSlotProps,
 } from "./filter-builder.js";
+export type { FilterValue } from "../filters/filter-state.js";
 export { useFilterBuilder } from "./use-filter-builder.js";

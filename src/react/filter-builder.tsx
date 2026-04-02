@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
+import type { FilterValue } from "../filters/filter-state.js";
 import type { FilterDescriptor } from "../filters/index.js";
 import type { FilterFor } from "../types.js";
 import { useFilterBuilder } from "./use-filter-builder.js";
@@ -19,8 +20,8 @@ export type ConditionSelectSlotProps = {
 export type ValueInputSlotProps = {
   column: FilterDescriptor["columns"][number];
   condition: string;
-  value: unknown;
-  onChange: (value: unknown) => void;
+  value: FilterValue;
+  onChange: (value: FilterValue) => void;
 };
 
 export type RemoveButtonSlotProps = {
@@ -119,6 +120,16 @@ function parseDateInput(str: string): Date | undefined {
   return new Date(str + "T00:00:00Z");
 }
 
+function asTuple(
+  value: FilterValue,
+): [FilterValue | undefined, FilterValue | undefined] {
+  if (Array.isArray(value)) {
+    return [value[0], value[1]];
+  }
+
+  return [undefined, undefined];
+}
+
 function defaultValueInput({
   column,
   condition,
@@ -126,7 +137,7 @@ function defaultValueInput({
   onChange,
 }: ValueInputSlotProps) {
   if (condition === "between" && column.type === "date") {
-    const tuple = (value as [unknown, unknown]) ?? [undefined, undefined];
+    const tuple = asTuple(value);
 
     return (
       <div className="flex items-center gap-1">
@@ -148,7 +159,7 @@ function defaultValueInput({
   }
 
   if (condition === "between") {
-    const tuple = (value as [unknown, unknown]) ?? [undefined, undefined];
+    const tuple = asTuple(value);
 
     return (
       <div className="flex items-center gap-1">
@@ -170,7 +181,7 @@ function defaultValueInput({
   }
 
   if (column.values) {
-    const selected = (Array.isArray(value) ? value : []) as string[];
+    const selected = Array.isArray(value) ? (value as string[]) : [];
 
     return (
       <div className="flex flex-wrap gap-2">
@@ -238,7 +249,7 @@ function defaultValueInput({
     <input
       className="rounded border px-2 py-1"
       type="text"
-      value={(value as string) ?? ""}
+      value={typeof value === "string" ? value : ""}
       onChange={(e) => onChange(e.target.value)}
     />
   );

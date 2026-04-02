@@ -1,15 +1,5 @@
 {
-  "entry": [
-    "scripts/*.ts",
-    "tests/**/*.test.ts",
-    "tests/types.ts"
-  ],
-  "project": [
-    "src/**/*.{ts,tsx}",
-    "tests/**/*.ts",
-    "scripts/*.ts"
-  ],
-  "ignore": [
-    "src/filters/filter-state.ts"
-  ]
+  "entry": ["scripts/*.ts", "tests/**/*.test.ts", "tests/types.ts"],
+  "project": ["src/**/*.{ts,tsx}", "tests/**/*.ts", "scripts/*.ts"],
+  "ignore": ["src/filters/filter-state.ts"]
 }

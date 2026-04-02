@@ -1,28 +1,27 @@
-import { useQuery } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
-import { FilterBuilder } from 'tsense/react'
-
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { FilterBuilder } from "tsense/react";
 // if you dont want this you can just add an endpoint to serve the description.
-import { describe } from '../api/describe' with { type: 'macro' }
-import { orpc } from '../client'
+import { describe } from "../api/describe" with { type: "macro" };
+import { orpc } from "../client";
 
-const descriptor = describe()
+const descriptor = describe();
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute("/")({
   component: IndexPage,
-})
+});
 
 function IndexPage() {
-  const [filter, setFilter] = useState<typeof descriptor.infer>({})
-  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<typeof descriptor.infer>({});
+  const [query, setQuery] = useState("");
 
   const { data: results } = useQuery(
     orpc.search.queryOptions({
       input: { query, filter },
       placeholderData: (prev) => prev,
-    })
-  )
+    }),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,9 +62,9 @@ function IndexPage() {
                 <td className="py-2">{user.email}</td>
                 <td className="py-2">{user.age}</td>
                 <td className="py-2">{user.company}</td>
-                <td className="py-2">{user.active ? 'Yes' : 'No'}</td>
+                <td className="py-2">{user.active ? "Yes" : "No"}</td>
                 <td className="py-2">
-                  {user.joined_at ? user.joined_at.toLocaleDateString() : '—'}
+                  {user.joined_at ? user.joined_at.toLocaleDateString() : "—"}
                 </td>
               </tr>
             ))}
@@ -73,5 +72,5 @@ function IndexPage() {
         </table>
       </div>
     </div>
-  )
+  );
 }
