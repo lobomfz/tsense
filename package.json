@@ -1,6 +1,6 @@
 {
   "name": "tsense",
-  "version": "0.1.0",
+  "version": "0.2.0-next.2",
   "private": false,
   "description": "Opinionated, fully typed typesense client",
   "keywords": [

@@ -59,11 +59,18 @@ const conditionToOperator: Record<string, string | null> = {
 let nextRowId = 0;
 
 export function createInitialState(): FilterState {
-  return { rows: [{ id: ++nextRowId }] };
+  return { rows: [] };
 }
 
 export function addRow(state: FilterState): FilterState {
   return { rows: [...state.rows, { id: ++nextRowId }] };
+}
+
+export function addRowWithField(
+  state: FilterState,
+  field: string,
+): FilterState {
+  return { rows: [...state.rows, { id: ++nextRowId, field }] };
 }
 
 export function removeRow(state: FilterState, index: number): FilterState {
@@ -108,6 +115,48 @@ export function clearState(): FilterState {
   return { rows: [] };
 }
 
+function filterValueToRow(field: string, filterValue: FilterValue) {
+  if (filterValue == null) {
+    return null;
+  }
+
+  if (Array.isArray(filterValue)) {
+    return {
+      id: ++nextRowId,
+      field,
+      condition: "is_in" as const,
+      value: filterValue,
+    };
+  }
+
+  if (typeof filterValue !== "object" || filterValue instanceof Date) {
+    return {
+      id: ++nextRowId,
+      field,
+      condition: "equals" as const,
+      value: filterValue,
+    };
+  }
+
+  const ops = filterValue as unknown as Record<string, FilterValue>;
+  const keys = Object.keys(ops);
+
+  if (keys.includes("gte") && keys.includes("lte")) {
+    return {
+      id: ++nextRowId,
+      field,
+      condition: "between" as const,
+      value: [ops.gte, ops.lte] as [FilterValue, FilterValue],
+    };
+  }
+
+  if (keys[0]) {
+    return { id: ++nextRowId, field, condition: keys[0], value: ops[keys[0]] };
+  }
+
+  return null;
+}
+
 export function applyPreset<T>(
   state: FilterState,
   descriptor: FilterDescriptor<T>,
@@ -117,57 +166,25 @@ export function applyPreset<T>(
   const column = descriptor.columns.find((c) => c.key === field);
   const preset = column?.presets?.find((p) => p.name === name);
 
-  if (!preset) return state;
-
-  const filterValue = preset.filter[field] as FilterValue;
-
-  if (filterValue == null) return state;
-
-  if (Array.isArray(filterValue)) {
-    return {
-      rows: [
-        ...state.rows,
-        { id: ++nextRowId, field, condition: "is_in", value: filterValue },
-      ],
-    };
+  if (!preset) {
+    return state;
   }
 
-  if (typeof filterValue !== "object" || filterValue instanceof Date) {
-    return {
-      rows: [
-        ...state.rows,
-        { id: ++nextRowId, field, condition: "equals", value: filterValue },
-      ],
-    };
+  const rows: FilterRow[] = [];
+
+  for (const [key, value] of Object.entries(preset.filter)) {
+    const row = filterValueToRow(key, value as FilterValue);
+
+    if (row) {
+      rows.push(row);
+    }
   }
 
-  const ops = filterValue as unknown as Record<string, FilterValue>;
-  const keys = Object.keys(ops);
-
-  if (keys.includes("gte") && keys.includes("lte")) {
-    return {
-      rows: [
-        ...state.rows,
-        {
-          id: ++nextRowId,
-          field,
-          condition: "between",
-          value: [ops.gte, ops.lte],
-        },
-      ],
-    };
+  if (!rows.length) {
+    return state;
   }
 
-  if (keys[0]) {
-    return {
-      rows: [
-        ...state.rows,
-        { id: ++nextRowId, field, condition: keys[0], value: ops[keys[0]] },
-      ],
-    };
-  }
-
-  return state;
+  return { rows };
 }
 
 export function conditionsFor<T>(

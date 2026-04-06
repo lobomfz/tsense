@@ -3,6 +3,10 @@ import type { FieldTransformer } from "./transformers/types.js";
 
 type BaseIfArray<T> = T extends (infer Q)[] ? Q : T;
 
+export type WithNull<T> = {
+  [K in keyof T]: undefined extends T[K] ? T[K] | null : T[K];
+};
+
 export type FieldSchema = {
   name: string;
   type: string;

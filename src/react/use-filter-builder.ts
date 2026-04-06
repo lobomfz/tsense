@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   addRow,
+  addRowWithField,
   applyPreset as applyPresetState,
   buildResult,
   clearState,
@@ -22,6 +23,7 @@ type UseFilterBuilderReturn = {
   columns: FilterDescriptor["columns"];
   rows: FilterRow[];
   add: () => void;
+  addWithField: (field: string) => void;
   remove: (index: number) => void;
   setField: (index: number, field: string) => void;
   setCondition: (index: number, condition: string) => void;
@@ -55,6 +57,7 @@ export function useFilterBuilder<T>(
     columns: descriptor.columns,
     rows: state.rows,
     add: () => setState(addRow),
+    addWithField: (field: string) => setState((s) => addRowWithField(s, field)),
     remove: (index: number) => setState((s) => removeRow(s, index)),
     setField: (index: number, field: string) =>
       setState((s) => setRowField(s, index, field)),

@@ -105,11 +105,25 @@ export function createFilterBuilder<T extends Type>(
         "notIn?": "string[]",
       });
 
+      const dateInput = "number | string | Date";
+
+      const dateOps = type.raw({
+        "not?": dateInput,
+        "gt?": dateInput,
+        "gte?": dateInput,
+        "lt?": dateInput,
+        "lte?": dateInput,
+        "notIn?": `(${dateInput})[]`,
+      });
+
       const fieldSchemas: Record<ColumnType, unknown> = {
         number: type.raw("number").or(type.raw("number[]")).or(numberOps),
         string: type.raw("string").or(type.raw("string[]")).or(stringOps),
         boolean: type.raw("boolean"),
-        date: type.raw("number").or(type.raw("number[]")).or(numberOps),
+        date: type
+          .raw(dateInput)
+          .or(type.raw(`(${dateInput})[]`))
+          .or(dateOps),
       };
 
       const descriptor = this.describe();

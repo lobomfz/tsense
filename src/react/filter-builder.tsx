@@ -4,6 +4,7 @@ import type { FilterDescriptor } from "../filters/index.js";
 import type { FilterFor } from "../types.js";
 import { useFilterBuilder } from "./use-filter-builder.js";
 
+// ======== Types ========
 export type FieldSelectSlotProps = {
   columns: FilterDescriptor["columns"];
   value: string | undefined;
@@ -51,6 +52,45 @@ export type RootSlotProps = {
   presets: ReactNode | null;
 };
 
+// ======== Helpers ========
+function formatDateForInput(date: unknown): string {
+  if (!(date instanceof Date)) return "";
+
+  return date.toISOString().slice(0, 10);
+}
+
+function parseDateInput(str: string): Date | undefined {
+  if (!str) return undefined;
+
+  return new Date(str + "T00:00:00Z");
+}
+
+function asTuple(
+  value: FilterValue,
+): [FilterValue | undefined, FilterValue | undefined] {
+  if (Array.isArray(value)) {
+    return [value[0], value[1]];
+  }
+
+  return [undefined, undefined];
+}
+
+function renderSelectOptions(
+  options: { key: string; label: string }[],
+  defaultValue?: string,
+) {
+  const opts = defaultValue
+    ? [{ key: "", label: defaultValue }, ...options]
+    : options;
+
+  return opts.map((o) => (
+    <option key={o.key} value={o.key}>
+      {o.label}
+    </option>
+  ));
+}
+
+// ======== Components ========
 type FilterBuilderProps<T> = {
   descriptor: FilterDescriptor<T>;
   onChange?: (filter: FilterFor<T>) => void;
@@ -75,12 +115,7 @@ function defaultFieldSelect({
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
     >
-      <option value="">Column</option>
-      {columns.map((col) => (
-        <option key={col.key} value={col.key}>
-          {col.label}
-        </option>
-      ))}
+      {renderSelectOptions(columns, "Column")}
     </select>
   );
 }
@@ -98,36 +133,9 @@ function defaultConditionSelect({
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
     >
-      <option value="">Condition</option>
-      {conditions.map((c) => (
-        <option key={c.key} value={c.key}>
-          {c.label}
-        </option>
-      ))}
+      {renderSelectOptions(conditions, "Condition")}
     </select>
   );
-}
-
-function formatDateForInput(date: unknown): string {
-  if (!(date instanceof Date)) return "";
-
-  return date.toISOString().slice(0, 10);
-}
-
-function parseDateInput(str: string): Date | undefined {
-  if (!str) return undefined;
-
-  return new Date(str + "T00:00:00Z");
-}
-
-function asTuple(
-  value: FilterValue,
-): [FilterValue | undefined, FilterValue | undefined] {
-  if (Array.isArray(value)) {
-    return [value[0], value[1]];
-  }
-
-  return [undefined, undefined];
 }
 
 function defaultValueInput({
@@ -189,7 +197,10 @@ function defaultValueInput({
           const checked = selected.includes(v.value);
 
           return (
-            <label key={v.value} className="flex items-center gap-1 text-sm">
+            <label
+              key={v.value}
+              className="flex cursor-pointer select-none items-center gap-1 text-sm"
+            >
               <input
                 type="checkbox"
                 checked={checked}
@@ -232,15 +243,19 @@ function defaultValueInput({
   }
 
   if (column.type === "boolean") {
+    const options = [
+      { key: "", label: "Value" },
+      { key: "true", label: "true" },
+      { key: "false", label: "false" },
+    ];
+
     return (
       <select
         className="rounded border px-2 py-1"
         value={value == null ? "" : String(value)}
         onChange={(e) => onChange(e.target.value === "true")}
       >
-        <option value="">Value</option>
-        <option value="true">true</option>
-        <option value="false">false</option>
+        {renderSelectOptions(options)}
       </select>
     );
   }

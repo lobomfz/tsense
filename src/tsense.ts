@@ -22,6 +22,7 @@ import type {
   TsenseOptions,
   UpdateResult,
   UpsertResult,
+  WithNull,
 } from "./types.js";
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
@@ -106,8 +107,14 @@ export class TSense<T extends Type> {
     return "string";
   }
 
-  private serializeDoc(doc: T["infer"]): Record<string, unknown> {
+  private serializeDoc(doc: WithNull<T["infer"]>): Record<string, unknown> {
     const result = { ...(doc as Record<string, unknown>) };
+
+    for (const key of Object.keys(result)) {
+      if (result[key] == null) {
+        delete result[key];
+      }
+    }
 
     for (const [field, transformer] of this.fieldTransformers) {
       if (result[field] != null) {
@@ -640,7 +647,9 @@ export class TSense<T extends Type> {
     return data.found;
   }
 
-  async upsert(docs: T["infer"] | T["infer"][]): Promise<UpsertResult[]> {
+  async upsert(
+    docs: WithNull<T["infer"]> | WithNull<T["infer"]>[],
+  ): Promise<UpsertResult[]> {
     await this.ensureSynced();
 
     const items = Array.isArray(docs) ? docs : [docs];
