@@ -13,6 +13,7 @@ import {
   setRowField,
   setRowValue,
   type FilterRow,
+  type FilterState,
   type FilterValue,
 } from "../filters/filter-state.js";
 import type { FilterDescriptor } from "../filters/index.js";
@@ -41,7 +42,7 @@ type UseFilterBuilderReturn = {
 export function useFilterBuilder<T>(
   descriptor: FilterDescriptor<T>,
 ): UseFilterBuilderReturn {
-  const [state, setState] = useState(createInitialState);
+  const [state, setState] = useState<FilterState>(createInitialState);
 
   const presets = useMemo(
     () =>

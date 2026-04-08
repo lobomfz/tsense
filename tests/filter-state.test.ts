@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   addRow,
+  addRowWithField,
   applyPreset,
   buildResult,
   clearState,
@@ -67,23 +68,31 @@ const descriptor: FilterDescriptor = {
 };
 
 describe("filter state", () => {
-  it("creates initial state with one empty row", () => {
+  it("creates initial state with no rows", () => {
     const state = createInitialState();
 
-    expect(state.rows.length).toBe(1);
-    expect(state.rows[0].field).toBeUndefined();
+    expect(state.rows).toEqual([]);
   });
 
   it("adds a row", () => {
     const state = createInitialState();
     const next = addRow(state);
 
-    expect(next.rows.length).toBe(2);
-    expect(next.rows[1].field).toBeUndefined();
+    expect(next.rows.length).toBe(1);
+    expect(next.rows[0].field).toBeUndefined();
+  });
+
+  it("adds a row with field", () => {
+    const state = createInitialState();
+    const next = addRowWithField(state, "age");
+
+    expect(next.rows.length).toBe(1);
+    expect(next.rows[0].field).toBe("age");
   });
 
   it("removes a row by index", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowField(state, 1, "name");
@@ -96,6 +105,7 @@ describe("filter state", () => {
 
   it("setField clears condition and value", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "equals");
     state = setRowValue(state, 0, 22);
@@ -109,6 +119,7 @@ describe("filter state", () => {
 
   it("setCondition clears value", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "equals");
     state = setRowValue(state, 0, 22);
@@ -122,6 +133,7 @@ describe("filter state", () => {
 
   it("setValue preserves field and condition", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "equals");
 
@@ -146,14 +158,15 @@ describe("filter state", () => {
     const state = createInitialState();
     const next = addRow(state);
 
-    expect(state.rows.length).toBe(1);
-    expect(next.rows.length).toBe(2);
+    expect(state.rows.length).toBe(0);
+    expect(next.rows.length).toBe(1);
   });
 });
 
 describe("buildResult", () => {
   it("equals condition produces direct value", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "equals");
     state = setRowValue(state, 0, 22);
@@ -163,6 +176,7 @@ describe("buildResult", () => {
 
   it("not_equals produces not operator", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "name");
     state = setRowCondition(state, 0, "not_equals");
     state = setRowValue(state, 0, "Alice");
@@ -172,6 +186,7 @@ describe("buildResult", () => {
 
   it("gt produces gt operator", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "gt");
     state = setRowValue(state, 0, 30);
@@ -181,6 +196,7 @@ describe("buildResult", () => {
 
   it("between produces gte+lte operators", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "between");
     state = setRowValue(state, 0, [18, 65]);
@@ -190,6 +206,7 @@ describe("buildResult", () => {
 
   it("between excludes incomplete tuple (missing max)", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "between");
     state = setRowValue(state, 0, [18, undefined]);
@@ -199,6 +216,7 @@ describe("buildResult", () => {
 
   it("merges multiple operators on same field", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "gte");
@@ -212,6 +230,7 @@ describe("buildResult", () => {
 
   it("excludes rows without field", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowCondition(state, 0, "equals");
     state = setRowValue(state, 0, 22);
 
@@ -220,6 +239,7 @@ describe("buildResult", () => {
 
   it("excludes rows without condition", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowValue(state, 0, 22);
 
@@ -228,6 +248,7 @@ describe("buildResult", () => {
 
   it("excludes rows without value", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "equals");
 
@@ -236,6 +257,7 @@ describe("buildResult", () => {
 
   it("includes value 0 as set", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "equals");
     state = setRowValue(state, 0, 0);
@@ -245,6 +267,7 @@ describe("buildResult", () => {
 
   it("combines multiple complete rows for different fields", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = addRow(state);
     state = setRowField(state, 0, "age");
     state = setRowCondition(state, 0, "gt");
@@ -261,6 +284,7 @@ describe("buildResult", () => {
 
   it("is_in produces direct array value", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "company");
     state = setRowCondition(state, 0, "is_in");
     state = setRowValue(state, 0, ["netflix", "google"]);
@@ -270,6 +294,7 @@ describe("buildResult", () => {
 
   it("is_not_in produces notIn operator", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "company");
     state = setRowCondition(state, 0, "is_not_in");
     state = setRowValue(state, 0, ["netflix"]);
@@ -279,6 +304,7 @@ describe("buildResult", () => {
 
   it("is_in excludes empty array", () => {
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "company");
     state = setRowCondition(state, 0, "is_in");
     state = setRowValue(state, 0, []);
@@ -289,6 +315,7 @@ describe("buildResult", () => {
   it("date equals produces direct Date value", () => {
     const date = new Date("2024-01-15T00:00:00Z");
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "created_at");
     state = setRowCondition(state, 0, "equals");
     state = setRowValue(state, 0, date);
@@ -299,6 +326,7 @@ describe("buildResult", () => {
   it("date gt produces gt operator with Date", () => {
     const date = new Date("2024-01-15T00:00:00Z");
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "created_at");
     state = setRowCondition(state, 0, "gt");
     state = setRowValue(state, 0, date);
@@ -310,6 +338,7 @@ describe("buildResult", () => {
     const from = new Date("2024-01-01T00:00:00Z");
     const to = new Date("2024-12-31T00:00:00Z");
     let state = createInitialState();
+    state = addRow(state);
     state = setRowField(state, 0, "created_at");
     state = setRowCondition(state, 0, "between");
     state = setRowValue(state, 0, [from, to]);
@@ -323,9 +352,9 @@ describe("applyPreset", () => {
     const state = createInitialState();
     const next = applyPreset(state, descriptor, "age", "Over 18");
 
-    expect(next.rows.length).toBe(2);
+    expect(next.rows.length).toBe(1);
 
-    const presetRow = next.rows[1];
+    const presetRow = next.rows[0];
     expect(presetRow.field).toBe("age");
     expect(presetRow.condition).toBe("gte");
     expect(presetRow.value).toBe(18);
@@ -335,7 +364,7 @@ describe("applyPreset", () => {
     const state = createInitialState();
     const next = applyPreset(state, descriptor, "age", "Unknown");
 
-    expect(next.rows.length).toBe(1);
+    expect(next.rows.length).toBe(0);
   });
 
   it("result includes preset row", () => {
@@ -377,7 +406,7 @@ describe("applyPreset with array", () => {
       "Big Tech",
     );
 
-    const presetRow = next.rows[1];
+    const presetRow = next.rows[0];
 
     expect(presetRow.field).toBe("company");
     expect(presetRow.condition).toBe("is_in");

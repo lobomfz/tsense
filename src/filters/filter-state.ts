@@ -16,6 +16,10 @@ export type FilterRow = {
   value?: FilterValue;
 };
 
+export type FilterState = {
+  rows: FilterRow[];
+};
+
 type ScalarCondition = "equals" | "not_equals" | "gt" | "gte" | "lt" | "lte";
 type ArrayCondition = "is_in" | "is_not_in";
 type RangeCondition = "between";
@@ -39,10 +43,6 @@ type CompleteFilterRow =
       condition: ScalarCondition;
       value: FilterValue;
     };
-
-export type FilterState = {
-  rows: FilterRow[];
-};
 
 const conditionToOperator: Record<string, string | null> = {
   equals: null,
@@ -138,23 +138,28 @@ function filterValueToRow(field: string, filterValue: FilterValue) {
     };
   }
 
-  const ops = filterValue as unknown as Record<string, FilterValue>;
-  const keys = Object.keys(ops);
+  const operators = filterValue as Record<string, FilterValue>;
+  const keys = Object.keys(operators);
 
   if (keys.includes("gte") && keys.includes("lte")) {
     return {
       id: ++nextRowId,
       field,
       condition: "between" as const,
-      value: [ops.gte, ops.lte] as [FilterValue, FilterValue],
+      value: [operators.gte, operators.lte] as [FilterValue, FilterValue],
     };
   }
 
-  if (keys[0]) {
-    return { id: ++nextRowId, field, condition: keys[0], value: ops[keys[0]] };
+  if (!keys[0]) {
+    return null;
   }
 
-  return null;
+  return {
+    id: ++nextRowId,
+    field,
+    condition: keys[0],
+    value: operators[keys[0]],
+  };
 }
 
 export function applyPreset<T>(
@@ -210,7 +215,9 @@ export function columnFor<T>(
 }
 
 function isRowComplete(row: FilterRow): row is CompleteFilterRow {
-  if (!row.field || !row.condition || row.value == null) return false;
+  if (!row.field || !row.condition || row.value == null) {
+    return false;
+  }
 
   if (row.condition === "between") {
     return (
@@ -229,7 +236,9 @@ export function buildResult(state: FilterState): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
   for (const row of state.rows) {
-    if (!isRowComplete(row)) continue;
+    if (!isRowComplete(row)) {
+      continue;
+    }
 
     if (row.condition === "equals" || row.condition === "is_in") {
       result[row.field] = row.value;
@@ -242,13 +251,16 @@ export function buildResult(state: FilterState): Record<string, unknown> {
         typeof result[row.field] === "object" && result[row.field] !== null
           ? (result[row.field] as Record<string, unknown>)
           : {};
+
       result[row.field] = { ...existing, gte: min, lte: max };
       continue;
     }
 
     const operator = conditionToOperator[row.condition];
 
-    if (!operator) continue;
+    if (!operator) {
+      continue;
+    }
 
     const existing = result[row.field];
 
@@ -258,7 +270,7 @@ export function buildResult(state: FilterState): Record<string, unknown> {
       !Array.isArray(existing)
     ) {
       result[row.field] = {
-        ...(existing as Record<string, unknown>),
+        ...existing,
         [operator]: row.value,
       };
     } else {
