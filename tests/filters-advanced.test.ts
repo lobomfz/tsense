@@ -11,36 +11,42 @@ beforeAll(async () => {
       name: "Alice Williams",
       email: "alice@example.com",
       age: 22,
+      active: true,
     },
     {
       id: "2",
       name: "Bob Smith",
       email: "bob@example.com",
       age: 30,
+      active: false,
     },
     {
       id: "3",
       name: "Charlie Brown",
       email: "charlie@example.com",
       age: 35,
+      active: true,
     },
     {
       id: "4",
       name: "David Lee",
       email: "david@example.com",
       age: 40,
+      active: false,
     },
     {
       id: "5",
       name: "Eva Martinez",
       email: "eva@example.com",
       age: 45,
+      active: true,
     },
     {
       id: "6",
       name: "Frank White",
       email: "frank@example.com",
       age: 45,
+      active: false,
     },
   ]);
 });
@@ -105,6 +111,26 @@ describe("advanced filtering", () => {
 
     expect(result.count).toBe(1);
     expect(result.data[0].name).toBe("David Lee");
+  });
+
+  it("should filter optional strings that are present", async () => {
+    const result = await collection.search({
+      filter: { email: { not: null } },
+    });
+
+    expect(result.count).toBe(6);
+  });
+
+  it("should negate boolean filters", async () => {
+    const result = await collection.search({
+      filter: { active: { not: true } },
+    });
+
+    expect(result.data.map((document) => document.name).sort()).toEqual([
+      "Bob Smith",
+      "David Lee",
+      "Frank White",
+    ]);
   });
 
   it("should handle nested OR conditions", async () => {

@@ -104,6 +104,22 @@ describe("field validation", () => {
     ).rejects.toThrow();
   });
 
+  it("should reject invalid filter fields", async () => {
+    expect(
+      collection.search({
+        filter: { nonexistent_field: "x" } as any,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("should reject invalid filter fields inside OR", async () => {
+    expect(
+      collection.search({
+        filter: { OR: [{ nonexistent_field: "x" }] } as any,
+      }),
+    ).rejects.toThrow();
+  });
+
   it("should accept valid queryBy fields", async () => {
     const result = await collection.search({
       queryBy: ["name", "email"],

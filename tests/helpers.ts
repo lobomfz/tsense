@@ -20,6 +20,7 @@ const UserSchema = type({
     index: true,
   }),
   "phone?": "string",
+  "active?": "boolean",
   "created_at?": "Date",
   name: type("string").configure({
     type: "string",
@@ -45,6 +46,7 @@ export const UsersCollection = new TSense({
   schema: UserSchema,
   connection,
   defaultSearchField: "name",
+  timezone: "America/Sao_Paulo",
 });
 
 export type User = typeof UserSchema.infer;

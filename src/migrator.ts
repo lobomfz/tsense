@@ -9,10 +9,22 @@ type SchemaDiff = {
 
 type CollectionResponse = {
   fields: FieldSchema[];
+  default_sorting_field?: string;
+  enable_nested_fields?: boolean;
 };
 
 const COMPARABLE_KEYS = ["type", "facet", "sort", "index", "optional"] as const;
 const NESTED_TYPES = new Set(["object", "object[]"]);
+const DEFAULT_SORT_TYPES = new Set([
+  "int32",
+  "int32[]",
+  "int64",
+  "int64[]",
+  "float",
+  "float[]",
+  "bool",
+  "bool[]",
+]);
 
 export class TSenseMigrator {
   constructor(
@@ -29,20 +41,22 @@ export class TSenseMigrator {
       return await this.create();
     }
 
-    const remoteFields = await this.getRemoteFields();
+    const remote = await this.getRemote();
 
-    const diff = this.diff(remoteFields);
+    if (
+      (remote.default_sorting_field || undefined) !==
+      (this.defaultSortingField ?? undefined)
+    ) {
+      throw new Error("SCHEMA_RECREATE_REQUIRED");
+    }
+
+    const diff = this.diff(remote.fields);
 
     if (!diff.toAdd.length && !diff.toRemove.length && !diff.toModify.length) {
       return;
     }
 
-    const patched = await this.patch(diff);
-
-    if (patched) return;
-
-    await this.drop();
-    await this.create();
+    await this.patch(diff);
   }
 
   private async exists(): Promise<boolean> {
@@ -57,13 +71,13 @@ export class TSenseMigrator {
       });
   }
 
-  private async getRemoteFields(): Promise<FieldSchema[]> {
+  private async getRemote(): Promise<CollectionResponse> {
     const { data } = await this.axios<CollectionResponse>({
       method: "GET",
       url: `/collections/${this.collectionName}`,
     });
 
-    return data.fields;
+    return data;
   }
 
   private diff(remote: FieldSchema[]): SchemaDiff {
@@ -91,6 +105,7 @@ export class TSenseMigrator {
 
     for (const remoteField of remote) {
       if (remoteField.name === "id") continue;
+      if (remoteField.name.includes(".")) continue;
       if (localByName.has(remoteField.name)) continue;
 
       toRemove.push(remoteField);
@@ -101,7 +116,7 @@ export class TSenseMigrator {
 
   private fieldsMatch(local: FieldSchema, remote: FieldSchema): boolean {
     for (const key of COMPARABLE_KEYS) {
-      if ((local[key] ?? undefined) !== (remote[key] ?? undefined)) {
+      if (this.fieldValue(local, key) !== this.fieldValue(remote, key)) {
         return false;
       }
     }
@@ -109,7 +124,34 @@ export class TSenseMigrator {
     return true;
   }
 
-  private async patch(diff: SchemaDiff): Promise<boolean> {
+  private fieldValue(
+    field: FieldSchema,
+    key: (typeof COMPARABLE_KEYS)[number],
+  ) {
+    switch (key) {
+      case "facet": {
+        return field.facet ?? false;
+      }
+
+      case "index": {
+        return field.index ?? true;
+      }
+
+      case "optional": {
+        return field.optional ?? false;
+      }
+
+      case "sort": {
+        return field.sort ?? DEFAULT_SORT_TYPES.has(field.type);
+      }
+
+      case "type": {
+        return field.type;
+      }
+    }
+  }
+
+  private async patch(diff: SchemaDiff): Promise<void> {
     const fields = [];
 
     for (const field of diff.toRemove) {
@@ -126,13 +168,13 @@ export class TSenseMigrator {
       fields.push(field);
     }
 
-    return await this.axios({
+    await this.axios({
       method: "PATCH",
       url: `/collections/${this.collectionName}`,
       data: { fields },
-    })
-      .then(() => true)
-      .catch(() => false);
+    }).catch(() => {
+      throw new Error("SCHEMA_RECREATE_REQUIRED");
+    });
   }
 
   private async create(): Promise<void> {
@@ -149,13 +191,6 @@ export class TSenseMigrator {
         default_sorting_field: this.defaultSortingField,
         enable_nested_fields,
       },
-    });
-  }
-
-  private async drop(): Promise<void> {
-    await this.axios({
-      method: "DELETE",
-      url: `/collections/${this.collectionName}`,
     });
   }
 }

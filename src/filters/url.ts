@@ -28,6 +28,12 @@ function coerceValue(raw: string, columnType: ColumnType): unknown {
   return raw;
 }
 
+function appendValues(params: URLSearchParams, key: string, values: unknown[]) {
+  for (const value of values) {
+    params.append(key, serializeValue(value));
+  }
+}
+
 export function serializeFilter(
   filter: Record<string, unknown>,
   descriptor: FilterDescriptor,
@@ -43,11 +49,7 @@ export function serializeFilter(
     }
 
     if (Array.isArray(value)) {
-      if (value.length === 1) {
-        params.set(key, serializeValue(value[0]));
-      } else if (value.length > 1) {
-        params.set(key, value.map((v) => serializeValue(v)).join(","));
-      }
+      appendValues(params, key, value);
 
       continue;
     }
@@ -61,10 +63,7 @@ export function serializeFilter(
         }
 
         if (Array.isArray(opValue)) {
-          params.set(
-            `${key}.${op}`,
-            opValue.map((v) => serializeValue(v)).join(","),
-          );
+          appendValues(params, `${key}.${op}`, opValue);
         } else {
           params.set(`${key}.${op}`, serializeValue(opValue));
         }
@@ -85,8 +84,16 @@ export function deserializeFilter(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const columnMap = new Map(descriptor.columns.map((c) => [c.key, c]));
+  const visited = new Set<string>();
 
-  for (const [paramKey, rawValue] of params.entries()) {
+  for (const paramKey of params.keys()) {
+    if (visited.has(paramKey)) {
+      continue;
+    }
+
+    visited.add(paramKey);
+
+    const rawValues = params.getAll(paramKey);
     const dotIndex = paramKey.indexOf(".");
 
     if (dotIndex !== -1) {
@@ -101,11 +108,11 @@ export function deserializeFilter(
       const existing = (result[field] ?? {}) as Record<string, unknown>;
 
       if (ARRAY_OPERATORS.has(operator)) {
-        existing[operator] = rawValue
-          .split(",")
-          .map((v) => coerceValue(v, column.type));
+        existing[operator] = rawValues.map((value) =>
+          coerceValue(value, column.type),
+        );
       } else {
-        existing[operator] = coerceValue(rawValue, column.type);
+        existing[operator] = coerceValue(rawValues[0]!, column.type);
       }
 
       result[field] = existing;
@@ -118,12 +125,12 @@ export function deserializeFilter(
       continue;
     }
 
-    if (rawValue.includes(",")) {
-      result[paramKey] = rawValue
-        .split(",")
-        .map((v) => coerceValue(v, column.type));
+    if (rawValues.length > 1) {
+      result[paramKey] = rawValues.map((value) =>
+        coerceValue(value, column.type),
+      );
     } else {
-      result[paramKey] = coerceValue(rawValue, column.type);
+      result[paramKey] = coerceValue(rawValues[0]!, column.type);
     }
   }
 

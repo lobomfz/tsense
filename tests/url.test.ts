@@ -84,10 +84,10 @@ describe("serializeFilter", () => {
     expect(params.get("created_at")).toBe("2026-03-01T00:00:00.000Z");
   });
 
-  it("serializes multi-value array as comma-separated", () => {
+  it("serializes multi-value array as repeated params", () => {
     const params = serializeFilter({ status: ["A", "C"] }, descriptor);
 
-    expect(params.get("status")).toBe("A,C");
+    expect(params.getAll("status")).toEqual(["A", "C"]);
   });
 
   it("serializes single-element array as direct value", () => {
@@ -109,13 +109,13 @@ describe("serializeFilter", () => {
     expect(params.get("name.not")).toBe("Bob");
   });
 
-  it("serializes notIn as comma-separated", () => {
+  it("serializes notIn as repeated params", () => {
     const params = serializeFilter(
       { status: { notIn: ["A", "C"] } },
       descriptor,
     );
 
-    expect(params.get("status.notIn")).toBe("A,C");
+    expect(params.getAll("status.notIn")).toEqual(["A", "C"]);
   });
 
   it("serializes date operators as ISO strings", () => {
@@ -179,8 +179,8 @@ describe("deserializeFilter", () => {
     expect(result.created_at).toBeInstanceOf(Date);
   });
 
-  it("splits comma-separated values into array", () => {
-    const params = new URLSearchParams("status=A,C");
+  it("reads repeated params into an array", () => {
+    const params = new URLSearchParams("status=A&status=C");
 
     const result = deserializeFilter(params, descriptor);
 
@@ -204,7 +204,7 @@ describe("deserializeFilter", () => {
   });
 
   it("deserializes notIn as array", () => {
-    const params = new URLSearchParams("status.notIn=A,C");
+    const params = new URLSearchParams("status.notIn=A&status.notIn=C");
 
     const result = deserializeFilter(params, descriptor);
 
@@ -255,6 +255,17 @@ describe("roundtrip", () => {
     expect(result).toEqual(filter);
   });
 
+  it("string value with comma", () => {
+    const filter = { name: "Doe, John" };
+
+    const result = deserializeFilter(
+      serializeFilter(filter, descriptor),
+      descriptor,
+    );
+
+    expect(result).toEqual(filter);
+  });
+
   it("number value", () => {
     const filter = { age: 25 };
 
@@ -290,6 +301,17 @@ describe("roundtrip", () => {
 
   it("multi-value array", () => {
     const filter = { status: ["A", "C"] };
+
+    const result = deserializeFilter(
+      serializeFilter(filter, descriptor),
+      descriptor,
+    );
+
+    expect(result).toEqual(filter);
+  });
+
+  it("multi-value string array with commas", () => {
+    const filter = { name: ["Doe, John", "Alice"] };
 
     const result = deserializeFilter(
       serializeFilter(filter, descriptor),

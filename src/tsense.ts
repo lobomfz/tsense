@@ -1,13 +1,19 @@
-import type { Type } from "arktype";
 import redaxios from "redaxios";
 import type { TsenseFieldMeta, TsenseFieldType } from "./env.js";
+import {
+  isRelativeDate,
+  resolveRelativeDate,
+} from "./filters/relative-dates.js";
 import { TSenseMigrator } from "./migrator.js";
 import { defaultTransformers } from "./transformers/defaults.js";
 import type { FieldTransformer } from "./transformers/types.js";
 import type {
   DeleteResult,
+  CollectionInfo,
   FieldSchema,
   FilterFor,
+  GroupSearchOptions,
+  GroupSearchResult,
   ProjectSearch,
   ScopedCollection,
   SearchApiResponse,
@@ -15,14 +21,17 @@ import type {
   SearchListResult,
   SearchOptions,
   SearchOptionsPlain,
+  SearchOptionsWithOmit,
+  SearchOptionsWithPick,
   SearchResult,
   SyncConfig,
   SyncOptions,
   SyncResult,
+  Synonym,
   TsenseOptions,
+  TsenseSchema,
   UpdateResult,
   UpsertResult,
-  WithNull,
 } from "./types.js";
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
@@ -70,7 +79,7 @@ const arkToTsense: Record<string, TsenseFieldMeta["type"]> = {
 
 export type AxiosInstance = ReturnType<typeof redaxiosInstance.create>;
 
-export class TSense<T extends Type> {
+export class TSense<T extends TsenseSchema> {
   readonly fields: readonly FieldSchema[] = [];
   private axios: AxiosInstance;
   private synced = false;
@@ -78,6 +87,14 @@ export class TSense<T extends Type> {
   private dataSyncConfig?: SyncConfig<T["infer"]>;
 
   infer: T["infer"] = undefined;
+
+  get name(): string {
+    return this.options.name;
+  }
+
+  get defaultSortingField(): keyof T["infer"] | undefined {
+    return this.options.defaultSortingField;
+  }
 
   constructor(private options: TsenseOptions<T>) {
     this.axios = redaxiosInstance.create({
@@ -100,14 +117,20 @@ export class TSense<T extends Type> {
     const direct = arkToTsense[arkType];
 
     if (direct) return direct;
-    if (arkType.includes("[]")) return "object[]";
+    if (arkType.includes("[]")) {
+      if (arkType.includes("'") || arkType.includes('"')) {
+        return "string[]";
+      }
+
+      return "object[]";
+    }
     if (arkType.includes("'") || arkType.includes('"')) return "string";
     if (arkType.includes("{") || arkType.includes("|")) return "object";
 
     return "string";
   }
 
-  private serializeDoc(doc: WithNull<T["infer"]>): Record<string, unknown> {
+  private serializeDoc(doc: Partial<T["infer"]>): Record<string, unknown> {
     const result = { ...(doc as Record<string, unknown>) };
 
     for (const key of Object.keys(result)) {
@@ -262,6 +285,38 @@ export class TSense<T extends Type> {
     await this.ensureSynced(true);
   }
 
+  async retrieve(): Promise<CollectionInfo | null> {
+    const { data } = await this.axios<CollectionInfo>({
+      method: "GET",
+      url: `/collections/${this.options.name}`,
+    }).catch((err: { status?: number }) => {
+      if (err.status === 404) {
+        return { data: null };
+      }
+
+      throw err;
+    });
+
+    return data;
+  }
+
+  async health(): Promise<boolean> {
+    const { data } = await this.axios<{ ok: boolean }>({
+      method: "GET",
+      url: "/health",
+    }).catch(() => ({ data: { ok: false } }));
+
+    return data.ok;
+  }
+
+  async upsertSynonym(id: string, synonym: Synonym): Promise<void> {
+    await this.axios({
+      method: "PUT",
+      url: `/collections/${this.options.name}/synonyms/${id}`,
+      data: synonym,
+    });
+  }
+
   private buildObjectFilter(
     key: string,
     value: Record<string, unknown>,
@@ -287,11 +342,14 @@ export class TSense<T extends Type> {
     const parts: string[] = [];
 
     for (const [op, opValue] of Object.entries(value)) {
-      if (opValue == null) continue;
-
       const builder = filterOperators[op];
 
-      if (builder) {
+      if (builder && op === "not" && opValue === null) {
+        parts.push(builder(key, opValue));
+        continue;
+      }
+
+      if (builder && opValue != null) {
         parts.push(builder(key, escapeFilterValue(opValue)));
       }
     }
@@ -312,7 +370,16 @@ export class TSense<T extends Type> {
 
         for (const condition of rawValue as FilterFor<T["infer"]>[]) {
           const inner = this.buildFilter(condition);
+
+          if (!inner.length) {
+            continue;
+          }
+
           orParts.push(`(${inner.join("&&")})`);
+        }
+
+        if (!orParts.length) {
+          continue;
         }
 
         result.push(`(${orParts.join("||")})`);
@@ -346,6 +413,36 @@ export class TSense<T extends Type> {
     return result;
   }
 
+  private validateFilterFields(filter?: FilterFor<T["infer"]>) {
+    if (!filter) {
+      return;
+    }
+
+    const fields: string[] = [];
+
+    for (const [key, value] of Object.entries(filter)) {
+      if (value == null) {
+        continue;
+      }
+
+      if (key === "OR") {
+        for (const condition of value as FilterFor<T["infer"]>[]) {
+          this.validateFilterFields(condition);
+        }
+
+        continue;
+      }
+
+      fields.push(key);
+    }
+
+    if (!fields.length) {
+      return;
+    }
+
+    this.validateFields(fields);
+  }
+
   private validateFields(fields: string[]) {
     const valid = new Set(this.fields.map((f) => f.name));
 
@@ -354,6 +451,83 @@ export class TSense<T extends Type> {
         throw new Error(`INVALID_FIELD: ${field}`);
       }
     }
+  }
+
+  private resolveFilterValue(value: unknown): unknown {
+    if (isRelativeDate(value)) {
+      return resolveRelativeDate(value, this.options.timezone!);
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((v) =>
+        isRelativeDate(v) ? resolveRelativeDate(v, this.options.timezone!) : v,
+      );
+    }
+
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      !(value instanceof Date)
+    ) {
+      const result: Record<string, unknown> = {};
+
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        result[k] = this.resolveFilterValue(v);
+      }
+
+      return result;
+    }
+
+    return value;
+  }
+
+  private resolveFilterDates(
+    filter: FilterFor<T["infer"]> | undefined,
+  ): FilterFor<T["infer"]> | undefined {
+    if (!filter || !this.options.timezone) {
+      return filter;
+    }
+
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(filter)) {
+      if (value == null) {
+        continue;
+      }
+
+      if (key === "OR") {
+        result.OR = (value as FilterFor<T["infer"]>[]).map((f) =>
+          this.resolveFilterDates(f),
+        );
+        continue;
+      }
+
+      result[key] = this.resolveFilterValue(value);
+    }
+
+    return result as FilterFor<T["infer"]>;
+  }
+
+  private buildFilterExpression(filter?: FilterFor<T["infer"]>) {
+    const resolved = this.resolveFilterDates(filter);
+    this.validateFilterFields(resolved);
+
+    const parts = this.buildFilter(resolved);
+
+    if (!parts.length) {
+      return;
+    }
+
+    return `(${parts.join("&&")})`;
+  }
+
+  private combineFilterExpressions(
+    ...filters: (FilterFor<T["infer"]> | undefined)[]
+  ) {
+    return filters
+      .map((filter) => this.buildFilterExpression(filter))
+      .filter((filter) => filter != null)
+      .join("&&");
   }
 
   private buildSort(options: SearchOptions<T["infer"]>) {
@@ -399,6 +573,15 @@ export class TSense<T extends Type> {
     });
   }
 
+  async recreate(): Promise<void> {
+    await this.drop().catch((err: { status?: number }) => {
+      if (err.status !== 404) {
+        throw err;
+      }
+    });
+    await this.create();
+  }
+
   async get(id: string): Promise<T["infer"] | null> {
     await this.ensureSynced();
 
@@ -427,10 +610,27 @@ export class TSense<T extends Type> {
     return data != null;
   }
 
-  async deleteMany(filter: FilterFor<T["infer"]>): Promise<DeleteResult> {
+  async deleteIds(ids: string[]): Promise<number> {
+    if (!ids.length) {
+      return 0;
+    }
+
     await this.ensureSynced();
 
-    const filterBy = this.buildFilter(filter).join("&&");
+    const values = ids.map(escapeFilterValue).join(",");
+    const { data } = await this.axios<{ num_deleted: number }>({
+      method: "DELETE",
+      url: `/collections/${this.options.name}/documents`,
+      params: { filter_by: `id:[${values}]` },
+    });
+
+    return data.num_deleted;
+  }
+
+  private async deleteManyWithFilterBy(
+    filterBy: string,
+  ): Promise<DeleteResult> {
+    await this.ensureSynced();
 
     if (!filterBy) {
       throw new Error("FILTER_REQUIRED");
@@ -445,10 +645,16 @@ export class TSense<T extends Type> {
     return { deleted: data.num_deleted };
   }
 
+  async deleteMany(filter: FilterFor<T["infer"]>): Promise<DeleteResult> {
+    return await this.deleteManyWithFilterBy(
+      this.combineFilterExpressions(filter),
+    );
+  }
+
   async update(id: string, data: Partial<T["infer"]>): Promise<T["infer"]> {
     await this.ensureSynced();
 
-    const serialized = this.serializeDoc(data as T["infer"]);
+    const serialized = this.serializeDoc(data);
 
     const { data: updated } = await this.axios<Record<string, unknown>>({
       method: "PATCH",
@@ -459,19 +665,17 @@ export class TSense<T extends Type> {
     return this.deserializeDoc(updated);
   }
 
-  async updateMany(
-    filter: FilterFor<T["infer"]>,
+  private async updateManyWithFilterBy(
+    filterBy: string,
     data: Partial<T["infer"]>,
   ): Promise<UpdateResult> {
     await this.ensureSynced();
-
-    const filterBy = this.buildFilter(filter).join("&&");
 
     if (!filterBy) {
       throw new Error("FILTER_REQUIRED");
     }
 
-    const serialized = this.serializeDoc(data as T["infer"]);
+    const serialized = this.serializeDoc(data);
 
     const { data: result } = await this.axios<{ num_updated: number }>({
       method: "PATCH",
@@ -483,9 +687,38 @@ export class TSense<T extends Type> {
     return { updated: result.num_updated };
   }
 
-  async search<
-    const O extends SearchOptions<T["infer"]> = SearchOptionsPlain<T["infer"]>,
-  >(options: O): Promise<SearchResult<ProjectSearch<T["infer"], O>>> {
+  async updateMany(
+    filter: FilterFor<T["infer"]>,
+    data: Partial<T["infer"]>,
+  ): Promise<UpdateResult> {
+    return await this.updateManyWithFilterBy(
+      this.combineFilterExpressions(filter),
+      data,
+    );
+  }
+
+  async search<const K extends readonly (keyof T["infer"])[]>(
+    options: SearchOptionsWithPick<T["infer"], K>,
+  ): Promise<SearchResult<Pick<T["infer"], K[number]>>>;
+  async search<const K extends readonly (keyof T["infer"])[]>(
+    options: SearchOptionsWithOmit<T["infer"], K>,
+  ): Promise<SearchResult<Omit<T["infer"], K[number]>>>;
+  async search(
+    options: SearchOptionsPlain<T["infer"]>,
+  ): Promise<SearchResult<T["infer"]>>;
+  async search(
+    options: SearchOptions<T["infer"]>,
+  ): Promise<SearchResult<T["infer"]>> {
+    return await this.executeSearch(
+      options,
+      this.combineFilterExpressions(options.filter),
+    );
+  }
+
+  private async executeSearch<const O extends SearchOptions<T["infer"]>>(
+    options: O,
+    filterBy: string,
+  ): Promise<SearchResult<ProjectSearch<T["infer"], O>>> {
     await this.ensureSynced();
 
     const queryByFields = (options.queryBy as string[]) ?? [
@@ -516,14 +749,20 @@ export class TSense<T extends Type> {
     const sortBy = this.buildSort(options);
     if (sortBy) params.sort_by = sortBy;
 
-    const filterBy = this.buildFilter(options.filter).join("&&");
-    if (filterBy) params.filter_by = filterBy;
+    const combinedFilter = [filterBy, ...(options.rawFilter ?? [])]
+      .filter((part) => part.length)
+      .join("&&");
+    if (combinedFilter) params.filter_by = combinedFilter;
 
     if (options.page != null) params.page = options.page;
     if (options.limit != null) params.per_page = options.limit;
 
     const facetBy = (options.facetBy as string[])?.join(",");
     if (facetBy) params.facet_by = facetBy;
+
+    if (options.exhaustiveSearch != null) {
+      params.exhaustive_search = options.exhaustiveSearch;
+    }
 
     if ("pick" in options && options.pick) {
       params.include_fields = (options.pick as readonly string[]).join(",");
@@ -593,20 +832,76 @@ export class TSense<T extends Type> {
     } as SearchResult<ProjectSearch<T["infer"], O>>;
   }
 
-  async searchList(
+  async groupedSearch(
+    options: GroupSearchOptions<T["infer"]>,
+  ): Promise<GroupSearchResult<T["infer"]>> {
+    await this.ensureSynced();
+
+    const queryByFields = (options.queryBy as string[]) ?? [
+      this.options.defaultSearchField as string,
+    ];
+    const groupByFields = Array.isArray(options.groupBy)
+      ? options.groupBy
+      : [options.groupBy];
+
+    this.validateFields([...queryByFields, ...groupByFields]);
+
+    const filterBy = this.combineFilterExpressions(options.filter);
+    const combinedFilter = [filterBy, ...(options.rawFilter ?? [])]
+      .filter((part) => part.length)
+      .join("&&");
+    const params: Record<string, unknown> = {
+      q: options.query ?? "*",
+      query_by: queryByFields.join(","),
+      group_by: groupByFields.join(","),
+      group_limit: options.groupLimit,
+    };
+
+    const sortBy = this.buildSort(options);
+    if (sortBy) params.sort_by = sortBy;
+    if (combinedFilter) params.filter_by = combinedFilter;
+    if (options.page != null) params.page = options.page;
+    if (options.limit != null) params.per_page = options.limit;
+    if (options.exhaustiveSearch != null) {
+      params.exhaustive_search = options.exhaustiveSearch;
+    }
+
+    const { data } = await this.axios<SearchApiResponse<T["infer"]>>({
+      method: "GET",
+      url: `/collections/${this.options.name}/documents/search`,
+      params,
+    });
+
+    return {
+      groups:
+        data.grouped_hits?.map((group) => ({
+          keys: group.group_key.map(String),
+          count: group.found ?? 0,
+          data: group.hits.map((hit) =>
+            this.deserializeDoc(hit.document as Record<string, unknown>),
+          ),
+        })) ?? [],
+      count: data.found,
+    };
+  }
+
+  private async searchListWithFilterBy(
     options: SearchListOptions<T["infer"]>,
+    filterBy: string,
   ): Promise<SearchListResult<T["infer"]>> {
     const page = options.cursor ? Number(options.cursor) : 1;
     const limit = Math.min(options.limit ?? 20, 100);
 
-    const result = await this.search({
-      query: options.query,
-      queryBy: options.queryBy,
-      filter: options.filter,
-      sortBy: [options.sortBy],
-      page,
-      limit,
-    });
+    const result = await this.executeSearch(
+      {
+        query: options.query,
+        queryBy: options.queryBy,
+        sortBy: [options.sortBy],
+        page,
+        limit,
+      },
+      filterBy,
+    );
 
     const hasMore = page * limit < result.count;
 
@@ -617,10 +912,17 @@ export class TSense<T extends Type> {
     };
   }
 
-  async count(filter?: FilterFor<T["infer"]>): Promise<number> {
-    await this.ensureSynced();
+  async searchList(
+    options: SearchListOptions<T["infer"]>,
+  ): Promise<SearchListResult<T["infer"]>> {
+    return await this.searchListWithFilterBy(
+      options,
+      this.combineFilterExpressions(options.filter),
+    );
+  }
 
-    const filterBy = this.buildFilter(filter).join("&&");
+  private async countWithFilterBy(filterBy: string): Promise<number> {
+    await this.ensureSynced();
 
     if (!filterBy) {
       const { data } = await this.axios<{ num_documents: number }>({
@@ -647,24 +949,26 @@ export class TSense<T extends Type> {
     return data.found;
   }
 
-  async upsert(
-    docs: WithNull<T["infer"]> | WithNull<T["infer"]>[],
-  ): Promise<UpsertResult[]> {
+  async count(filter?: FilterFor<T["infer"]>): Promise<number> {
+    return await this.countWithFilterBy(this.combineFilterExpressions(filter));
+  }
+
+  async upsert(docs: T["infer"] | T["infer"][]): Promise<UpsertResult[]> {
     await this.ensureSynced();
 
     const items = Array.isArray(docs) ? docs : [docs];
 
     if (!items.length) return [];
 
+    const serialized = items.map((item) => this.serializeDoc(item));
+
     if (this.options.validateOnUpsert) {
-      for (const item of items) {
+      for (const item of serialized) {
         this.options.schema.assert(item);
       }
     }
 
-    const payload = items
-      .map((item) => JSON.stringify(this.serializeDoc(item)))
-      .join("\n");
+    const payload = serialized.map((item) => JSON.stringify(item)).join("\n");
 
     const params: Record<string, unknown> = { action: "upsert" };
 
@@ -680,11 +984,17 @@ export class TSense<T extends Type> {
       data: payload,
     });
 
-    if (typeof data === "string") {
-      return data.split("\n").map((v: string) => JSON.parse(v));
+    const results =
+      typeof data === "string"
+        ? data.split("\n").map((value: string) => JSON.parse(value))
+        : [data as UpsertResult];
+    const failed = results.find((result) => !result.success);
+
+    if (failed) {
+      throw new Error(failed.error ?? "DOCUMENT_IMPORT_FAILED");
     }
 
-    return [data as UpsertResult];
+    return results;
   }
 
   async syncData(options?: SyncOptions): Promise<SyncResult> {
@@ -697,24 +1007,29 @@ export class TSense<T extends Type> {
     const ids = options?.ids ?? (await this.dataSyncConfig.getAllIds());
 
     let upserted = 0;
-    let failed = 0;
+    let deleted = 0;
 
     for (const chunk of chunkArray(ids, chunkSize)) {
       const items = await this.dataSyncConfig.getItems(chunk);
       const results = await this.upsert(items);
 
+      const itemIds = new Set(items.map((item) => item.id));
+      const missing = chunk.filter((id) => !itemIds.has(id));
+
+      if (missing.length) {
+        deleted += await this.deleteIds(missing);
+      }
+
       for (const r of results) {
         if (r.success) upserted++;
-        else failed++;
       }
     }
 
-    let deleted = 0;
     if (options?.purge) {
-      deleted = await this.purgeOrphans(ids, chunkSize);
+      deleted += await this.purgeOrphans(ids, chunkSize);
     }
 
-    return { upserted, deleted, failed };
+    return { upserted, deleted, failed: 0 };
   }
 
   private async purgeOrphans(
@@ -729,10 +1044,7 @@ export class TSense<T extends Type> {
 
     let deleted = 0;
     for (const chunk of chunkArray(orphans, chunkSize)) {
-      const result = await this.deleteMany({ id: chunk } as FilterFor<
-        T["infer"]
-      >);
-      deleted += result.deleted;
+      deleted += await this.deleteIds(chunk);
     }
 
     return deleted;
@@ -760,25 +1072,32 @@ export class TSense<T extends Type> {
       >(
         options: O,
       ) =>
-        this.search({
-          ...options,
-          filter: { ...options.filter, ...baseFilter },
-        }),
+        this.executeSearch(
+          options,
+          this.combineFilterExpressions(baseFilter, options.filter),
+        ),
 
       searchList: (options: SearchListOptions<T["infer"]>) =>
-        this.searchList({
-          ...options,
-          filter: { ...options.filter, ...baseFilter },
-        }),
+        this.searchListWithFilterBy(
+          options,
+          this.combineFilterExpressions(baseFilter, options.filter),
+        ),
 
       count: (filter?: FilterFor<T["infer"]>) =>
-        this.count({ ...filter, ...baseFilter }),
+        this.countWithFilterBy(
+          this.combineFilterExpressions(baseFilter, filter),
+        ),
 
       deleteMany: (filter: FilterFor<T["infer"]>) =>
-        this.deleteMany({ ...filter, ...baseFilter }),
+        this.deleteManyWithFilterBy(
+          this.combineFilterExpressions(baseFilter, filter),
+        ),
 
       updateMany: (filter: FilterFor<T["infer"]>, data: Partial<T["infer"]>) =>
-        this.updateMany({ ...filter, ...baseFilter }, data),
+        this.updateManyWithFilterBy(
+          this.combineFilterExpressions(baseFilter, filter),
+          data,
+        ),
     };
   }
 }

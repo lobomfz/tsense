@@ -1,4 +1,5 @@
 import type { FilterFor } from "../src/types.js";
+import { UsersCollection } from "./helpers.js";
 import type { User } from "./helpers.js";
 
 // --- Direct values ---
@@ -26,6 +27,11 @@ const _enum_array: FilterFor<User> = { company: ["netflix", "google"] };
 
 // --- OR ---
 const _or: FilterFor<User> = { OR: [{ age: 22 }, { name: "Alice" }] };
+
+type UpsertInput = Parameters<typeof UsersCollection.upsert>[0];
+const _valid_upsert: UpsertInput = { age: 22, name: "Alice" };
+// @ts-expect-error - upsert should not accept null values
+const _bad_upsert_null: UpsertInput = { age: 22, name: "Alice", company: null };
 
 // --- Undeclared keys ---
 // @ts-expect-error - undeclared key 'min' on NumberFilter
@@ -62,6 +68,8 @@ void [
   _enum_direct,
   _enum_array,
   _or,
+  _valid_upsert,
+  _bad_upsert_null,
   _bad_string_gt,
   _bad_string_lte,
   _bad_string_contains,

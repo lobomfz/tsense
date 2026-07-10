@@ -52,7 +52,11 @@ describe("sync", () => {
 
     await collection.syncSchema();
 
+    expect(await collection.health()).toBe(true);
+
+    const info = await collection.retrieve();
     const remote = await getCollection(collectionName);
+    expect(info?.name).toBe(collectionName);
     expect(remote).not.toBeNull();
     expect(remote?.fields.some((f) => f.name === "name")).toBe(true);
     expect(remote?.fields.some((f) => f.name === "age")).toBe(true);
@@ -189,13 +193,11 @@ describe("sync", () => {
     expect((countField as { facet?: boolean })?.facet).toBe(true);
   });
 
-  it("falls back to drop+create if patch fails", async () => {
+  it("requires an explicit recreate if patch fails", async () => {
     const initialSchema = type({
       "id?": "string",
       name: "string",
-      count: type("number.integer").configure({
-        type: "int64",
-      }),
+      count: "string",
     });
 
     const initialCollection = new TSense({
@@ -207,7 +209,7 @@ describe("sync", () => {
 
     await initialCollection.syncSchema();
 
-    await initialCollection.upsert({ id: "1", name: "test", count: 10 });
+    await initialCollection.upsert({ id: "1", name: "test", count: "ten" });
 
     const updatedSchema = type({
       "id?": "string",
@@ -224,11 +226,102 @@ describe("sync", () => {
       defaultSearchField: "name",
     });
 
-    await updatedCollection.syncSchema();
+    expect(() => updatedCollection.syncSchema()).toThrow(
+      "SCHEMA_RECREATE_REQUIRED",
+    );
 
     const remote = await getCollection(collectionName);
     const countField = remote?.fields.find((f) => f.name === "count");
-    expect(countField?.type).toBe("int32");
+    expect(countField?.type).toBe("string");
+
+    const document = await initialCollection.get("1");
+    expect(document?.name).toBe("test");
+  });
+
+  it("requires an explicit recreate when default sorting field changes", async () => {
+    const schema = type({
+      "id?": "string",
+      name: type("string").configure({ sort: true }),
+      age: type("number.integer").configure({ sort: true }),
+    });
+
+    const initialCollection = new TSense({
+      name: collectionName,
+      schema,
+      connection,
+      defaultSearchField: "name",
+      defaultSortingField: "name",
+    });
+
+    await initialCollection.syncSchema();
+    await initialCollection.upsert({ id: "1", name: "test", age: 10 });
+
+    const updatedCollection = new TSense({
+      name: collectionName,
+      schema,
+      connection,
+      defaultSearchField: "name",
+      defaultSortingField: "age",
+    });
+
+    expect(() => updatedCollection.syncSchema()).toThrow(
+      "SCHEMA_RECREATE_REQUIRED",
+    );
+
+    const document = await initialCollection.get("1");
+    expect(document?.name).toBe("test");
+  });
+
+  it("ignores materialized nested fields", async () => {
+    const schema = type({
+      "id?": "string",
+      name: "string",
+      profile: type({ color: "string", quantity: "number.integer" }).configure({
+        type: "object",
+      }),
+    });
+
+    const collection = new TSense({
+      name: collectionName,
+      schema,
+      connection,
+      defaultSearchField: "name",
+    });
+
+    await collection.syncSchema();
+    await collection.upsert({
+      id: "1",
+      name: "test",
+      profile: { color: "red", quantity: 3 },
+    });
+
+    const remote = await getCollection(collectionName);
+    expect(remote?.fields.some((field) => field.name.includes("."))).toBe(true);
+
+    await collection.syncSchema();
+
+    const document = await collection.get("1");
+    expect(document?.profile.color).toBe("red");
+  });
+});
+
+describe("schema inference", () => {
+  it("infers arrays of string literals as string arrays", () => {
+    const schema = type({
+      id: "string",
+      categories: type.enumerated("one", "two").array(),
+    });
+
+    const collection = new TSense({
+      name: "literal_array_test",
+      schema,
+      connection,
+      defaultSearchField: "id",
+    });
+
+    expect(
+      collection.fields.find((field) => field.name === "categories")?.type,
+    ).toBe("string[]");
   });
 });
 
@@ -308,5 +401,25 @@ describe("autoSync", () => {
 
     const result = await collection.search({});
     expect(result.count).toBe(1);
+  });
+
+  it("recreates a collection without requiring data sync", async () => {
+    const schema = type({
+      "id?": "string",
+      name: "string",
+    });
+
+    const collection = new TSense({
+      name: collectionName,
+      schema,
+      connection,
+      defaultSearchField: "name",
+    });
+
+    await collection.create();
+    await collection.upsert({ id: "1", name: "test" });
+    await collection.recreate();
+
+    expect(await collection.count()).toBe(0);
   });
 });

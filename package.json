@@ -1,6 +1,6 @@
 {
   "name": "tsense",
-  "version": "0.2.0-next.2",
+  "version": "0.2.0",
   "private": false,
   "description": "Opinionated, fully typed typesense client",
   "keywords": [
@@ -43,6 +43,7 @@
     "prepublishOnly": "bun run ci"
   },
   "dependencies": {
+    "dayjs": "^1.11.20",
     "redaxios": "^0.5.1"
   },
   "devDependencies": {

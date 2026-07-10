@@ -61,15 +61,24 @@ describe("scoped", () => {
     expect(result.data[0].name).toBe("Charlie");
   });
 
+  it("should combine same-field operators with AND semantics", async () => {
+    const scoped = collection.scoped({ age: { gte: 30 } });
+    const result = await scoped.search({ filter: { age: { lte: 35 } } });
+
+    expect(result.count).toBe(2);
+    expect(result.data.map((doc) => doc.name).sort()).toEqual([
+      "Bob",
+      "Charlie",
+    ]);
+  });
+
   it("should not allow caller to override base filter", async () => {
     const scoped = collection.scoped({ company: "netflix" });
     const result = await scoped.search({
       filter: { company: "google" } as any,
     });
 
-    for (const doc of result.data) {
-      expect(doc.company).toBe("netflix");
-    }
+    expect(result.count).toBe(0);
   });
 
   it("should work with searchList", async () => {
@@ -97,6 +106,13 @@ describe("scoped", () => {
     const count = await scoped.count({ age: { gte: 30 } });
 
     expect(count).toBe(1);
+  });
+
+  it("should combine same-field count filters with AND semantics", async () => {
+    const scoped = collection.scoped({ age: { gte: 30 } });
+    const count = await scoped.count({ age: { lte: 35 } });
+
+    expect(count).toBe(2);
   });
 
   it("should work with deleteMany", async () => {

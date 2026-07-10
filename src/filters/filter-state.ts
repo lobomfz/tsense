@@ -1,3 +1,4 @@
+import type { RelativeDate } from "../types.js";
 import type { FilterDescriptor } from "./index.js";
 
 export type FilterValue =
@@ -6,6 +7,7 @@ export type FilterValue =
   | number
   | boolean
   | Date
+  | RelativeDate
   | [FilterValue | undefined, FilterValue | undefined]
   | undefined;
 
@@ -18,6 +20,7 @@ export type FilterRow = {
 
 export type FilterState = {
   rows: FilterRow[];
+  manualRowIds: Set<number>;
 };
 
 type ScalarCondition = "equals" | "not_equals" | "gt" | "gte" | "lt" | "lte";
@@ -59,22 +62,42 @@ const conditionToOperator: Record<string, string | null> = {
 let nextRowId = 0;
 
 export function createInitialState(): FilterState {
-  return { rows: [] };
+  return { rows: [], manualRowIds: new Set() };
 }
 
 export function addRow(state: FilterState): FilterState {
-  return { rows: [...state.rows, { id: ++nextRowId }] };
+  const id = ++nextRowId;
+
+  return {
+    rows: [...state.rows, { id }],
+    manualRowIds: new Set([...state.manualRowIds, id]),
+  };
 }
 
 export function addRowWithField(
   state: FilterState,
   field: string,
 ): FilterState {
-  return { rows: [...state.rows, { id: ++nextRowId, field }] };
+  const id = ++nextRowId;
+
+  return {
+    rows: [...state.rows, { id, field }],
+    manualRowIds: new Set([...state.manualRowIds, id]),
+  };
 }
 
 export function removeRow(state: FilterState, index: number): FilterState {
-  return { rows: state.rows.filter((_, i) => i !== index) };
+  const removed = state.rows[index];
+  const manualRowIds = new Set(state.manualRowIds);
+
+  if (removed) {
+    manualRowIds.delete(removed.id);
+  }
+
+  return {
+    rows: state.rows.filter((_, i) => i !== index),
+    manualRowIds,
+  };
 }
 
 export function setRowField(
@@ -86,6 +109,7 @@ export function setRowField(
     rows: state.rows.map((row, i) =>
       i === index ? { id: row.id, field } : row,
     ),
+    manualRowIds: state.manualRowIds,
   };
 }
 
@@ -98,6 +122,7 @@ export function setRowCondition(
     rows: state.rows.map((row, i) =>
       i === index ? { ...row, condition, value: undefined } : row,
     ),
+    manualRowIds: state.manualRowIds,
   };
 }
 
@@ -108,88 +133,29 @@ export function setRowValue(
 ): FilterState {
   return {
     rows: state.rows.map((row, i) => (i === index ? { ...row, value } : row)),
+    manualRowIds: state.manualRowIds,
+  };
+}
+
+export function restoreRows(rows: Omit<FilterRow, "id">[]): FilterState {
+  return {
+    rows: rows.map((row) => ({ ...row, id: ++nextRowId })),
+    manualRowIds: new Set(),
   };
 }
 
 export function clearState(): FilterState {
-  return { rows: [] };
+  return { rows: [], manualRowIds: new Set() };
 }
 
-function filterValueToRow(field: string, filterValue: FilterValue) {
-  if (filterValue == null) {
-    return null;
-  }
-
-  if (Array.isArray(filterValue)) {
-    return {
-      id: ++nextRowId,
-      field,
-      condition: "is_in" as const,
-      value: filterValue,
-    };
-  }
-
-  if (typeof filterValue !== "object" || filterValue instanceof Date) {
-    return {
-      id: ++nextRowId,
-      field,
-      condition: "equals" as const,
-      value: filterValue,
-    };
-  }
-
-  const operators = filterValue as Record<string, FilterValue>;
-  const keys = Object.keys(operators);
-
-  if (keys.includes("gte") && keys.includes("lte")) {
-    return {
-      id: ++nextRowId,
-      field,
-      condition: "between" as const,
-      value: [operators.gte, operators.lte] as [FilterValue, FilterValue],
-    };
-  }
-
-  if (!keys[0]) {
-    return null;
-  }
-
-  return {
-    id: ++nextRowId,
-    field,
-    condition: keys[0],
-    value: operators[keys[0]],
-  };
-}
-
-export function applyPreset<T>(
-  state: FilterState,
-  descriptor: FilterDescriptor<T>,
-  field: string,
-  name: string,
-): FilterState {
-  const column = descriptor.columns.find((c) => c.key === field);
-  const preset = column?.presets?.find((p) => p.name === name);
-
-  if (!preset) {
-    return state;
-  }
-
-  const rows: FilterRow[] = [];
-
-  for (const [key, value] of Object.entries(preset.filter)) {
-    const row = filterValueToRow(key, value as FilterValue);
-
-    if (row) {
-      rows.push(row);
-    }
-  }
-
-  if (!rows.length) {
-    return state;
-  }
-
-  return { rows };
+export function hasManualRows(state: FilterState): boolean {
+  return state.rows.some(
+    (r) =>
+      state.manualRowIds.has(r.id) &&
+      r.field != null &&
+      r.condition != null &&
+      r.value != null,
+  );
 }
 
 export function conditionsFor<T>(

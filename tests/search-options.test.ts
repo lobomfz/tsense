@@ -292,3 +292,46 @@ describe("combined options", () => {
     }
   });
 });
+
+describe("dogama search options", () => {
+  it("combines typed and raw filters", async () => {
+    const result = await collection.search({
+      filter: { company: "netflix" },
+      rawFilter: ["age:>=30"],
+      exhaustiveSearch: true,
+    });
+
+    expect(result.data.map((document) => document.name)).toEqual([
+      "Charlie Davis",
+    ]);
+  });
+
+  it("groups documents by a facet", async () => {
+    const result = await collection.groupedSearch({
+      groupBy: "company",
+      groupLimit: 10,
+      exhaustiveSearch: true,
+    });
+
+    const groups = Object.fromEntries(
+      result.groups.map((group) => [group.keys[0], group]),
+    );
+
+    expect(groups.netflix?.count).toBe(2);
+    expect(groups.google?.count).toBe(1);
+    expect(groups.netflix?.data).toHaveLength(2);
+  });
+
+  it("upserts collection synonyms", async () => {
+    await collection.upsertSynonym("streaming", {
+      synonyms: ["streaming", "netflix"],
+    });
+
+    const result = await collection.search({
+      query: "streaming",
+      queryBy: ["company"],
+    });
+
+    expect(result.count).toBe(2);
+  });
+});

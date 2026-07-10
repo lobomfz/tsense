@@ -149,6 +149,27 @@ describe("filters", () => {
     expect(result.count).toBeGreaterThanOrEqual(2);
   });
 
+  it("should ignore empty OR branches", async () => {
+    const result = await collection.search({
+      filter: {
+        OR: [{} as any, { age: 22 }],
+      },
+    });
+
+    expect(result.count).toBe(1);
+    expect(result.data[0].age).toBe(22);
+  });
+
+  it("should treat an entirely empty OR as no filter", async () => {
+    const result = await collection.search({
+      filter: {
+        OR: [{} as any],
+      },
+    });
+
+    expect(result.count).toBe(3);
+  });
+
   it("should combine multiple filters", async () => {
     const result = await collection.search({
       filter: {

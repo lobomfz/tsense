@@ -1,4 +1,3 @@
-import type { Type } from "arktype";
 import type { FieldTransformer } from "./transformers/types.js";
 
 type BaseIfArray<T> = T extends (infer Q)[] ? Q : T;
@@ -18,7 +17,7 @@ export type FieldSchema = {
   enumValues?: string[];
 };
 
-export type SearchHit<T> = {
+type SearchHit<T> = {
   document: T;
   highlight?: Record<string, { snippet?: string }>;
   text_match?: number;
@@ -27,6 +26,11 @@ export type SearchHit<T> = {
 export type SearchApiResponse<T> = {
   found: number;
   hits?: SearchHit<T>[];
+  grouped_hits?: {
+    group_key: unknown[];
+    found?: number;
+    hits: SearchHit<T>[];
+  }[];
   facet_counts?: {
     field_name: string;
     counts: { value: string; count: number }[];
@@ -41,7 +45,12 @@ export type ConnectionConfig = {
   timeout?: number;
 };
 
-export type TsenseOptions<T extends Type> = {
+export interface TsenseSchema<Inferred = unknown> {
+  readonly infer: Inferred;
+  assert(data: unknown): Inferred;
+}
+
+export type TsenseOptions<T extends TsenseSchema> = {
   name: string;
   schema: T;
   connection: ConnectionConfig;
@@ -50,12 +59,21 @@ export type TsenseOptions<T extends Type> = {
   batchSize?: number;
   validateOnUpsert?: boolean;
   autoSyncSchema?: boolean;
+  timezone?: string;
   transformers?: FieldTransformer[];
   dataSync?: SyncConfig<T["infer"]>;
 };
 
+export type RelativeDateUnit = "day" | "week" | "month";
+
+export type RelativeDate =
+  | { startOf: RelativeDateUnit }
+  | { endOf: RelativeDateUnit };
+
+type DateValue = Date | RelativeDate;
+
 export type StringFilter = {
-  not?: string;
+  not?: string | null;
   notIn?: string[];
 };
 
@@ -68,19 +86,23 @@ export type NumberFilter = {
   lte?: number;
 };
 
+export type BooleanFilter = {
+  not?: boolean;
+};
+
 type DateFilter = {
-  not?: Date;
-  notIn?: Date[];
-  gt?: Date;
-  gte?: Date;
-  lt?: Date;
-  lte?: Date;
+  not?: DateValue;
+  notIn?: DateValue[];
+  gt?: DateValue;
+  gte?: DateValue;
+  lt?: DateValue;
+  lte?: DateValue;
 };
 
 type FilterValueFor<T> = [T] extends [boolean]
-  ? boolean
+  ? boolean | BooleanFilter
   : [T] extends [Date]
-    ? Date | Date[] | DateFilter
+    ? DateValue | DateValue[] | DateFilter
     : [T] extends [number]
       ? number | number[] | NumberFilter
       : [T] extends [string]
@@ -103,15 +125,33 @@ export type HighlightOptions<T> = {
 
 type SortableField<T> = Extract<keyof T, string> | "score";
 
-export type BaseSearchOptions<T> = {
+export type SortFor<T> = `${SortableField<T>}:${"asc" | "desc"}`;
+
+type BaseSearchOptions<T> = {
   query?: string;
   queryBy?: (keyof T)[];
   filter?: FilterFor<T>;
-  sortBy?: `${SortableField<T>}:${"asc" | "desc"}`[];
+  sortBy?: SortFor<T>[];
   facetBy?: (keyof T)[];
   page?: number;
   limit?: number;
   highlight?: boolean | HighlightOptions<T>;
+  rawFilter?: string[];
+  exhaustiveSearch?: boolean;
+};
+
+export type GroupSearchOptions<T> = BaseSearchOptions<T> & {
+  groupBy: Extract<keyof T, string> | Extract<keyof T, string>[];
+  groupLimit: number;
+};
+
+export type GroupSearchResult<T> = {
+  groups: {
+    keys: string[];
+    count: number;
+    data: T[];
+  }[];
+  count: number;
 };
 
 export type SearchOptionsWithPick<
@@ -167,6 +207,19 @@ export type UpsertResult = {
   document?: unknown;
 };
 
+export type CollectionInfo = {
+  name: string;
+  num_documents: number;
+  fields: FieldSchema[];
+  default_sorting_field?: string;
+  enable_nested_fields?: boolean;
+};
+
+export type Synonym = {
+  root?: string;
+  synonyms: string[];
+};
+
 export type SearchInput<T> = {
   query?: string;
   filter?: FilterFor<T>;
@@ -201,7 +254,7 @@ export type ScopedCollection<T> = {
 
 export type SyncConfig<T> = {
   getAllIds: () => Promise<string[]>;
-  getItems: (ids: string[]) => Promise<T[]>;
+  getItems: (ids: string[]) => Promise<(WithNull<T> & { id: string })[]>;
   chunkSize?: number;
 };
 

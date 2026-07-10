@@ -2,13 +2,14 @@ import { describe, expect, it } from "bun:test";
 import {
   addRow,
   addRowWithField,
-  applyPreset,
   buildResult,
   clearState,
   columnFor,
   conditionsFor,
   createInitialState,
+  hasManualRows,
   removeRow,
+  restoreRows,
   setRowCondition,
   setRowField,
   setRowValue,
@@ -29,7 +30,6 @@ const descriptor: FilterDescriptor = {
         { key: "lte", label: "less than or equal" },
         { key: "between", label: "between" },
       ],
-      presets: [{ name: "Over 18", filter: { age: { gte: 18 } } }],
     },
     {
       key: "name",
@@ -347,70 +347,87 @@ describe("buildResult", () => {
   });
 });
 
-describe("applyPreset", () => {
-  it("adds a completed row from preset", () => {
+describe("hasManualRows", () => {
+  it("is false on initial state", () => {
     const state = createInitialState();
-    const next = applyPreset(state, descriptor, "age", "Over 18");
 
-    expect(next.rows.length).toBe(1);
-
-    const presetRow = next.rows[0];
-    expect(presetRow.field).toBe("age");
-    expect(presetRow.condition).toBe("gte");
-    expect(presetRow.value).toBe(18);
+    expect(hasManualRows(state)).toBe(false);
   });
 
-  it("does nothing for unknown preset", () => {
-    const state = createInitialState();
-    const next = applyPreset(state, descriptor, "age", "Unknown");
+  it("is false when row is added but incomplete", () => {
+    let state = createInitialState();
+    state = addRow(state);
 
-    expect(next.rows.length).toBe(0);
+    expect(hasManualRows(state)).toBe(false);
   });
 
-  it("result includes preset row", () => {
-    const state = createInitialState();
-    const next = applyPreset(state, descriptor, "age", "Over 18");
+  it("is false when row has field but no condition or value", () => {
+    let state = createInitialState();
+    state = addRow(state);
+    state = setRowField(state, 0, "age");
 
-    expect(buildResult(next)).toEqual({ age: { gte: 18 } });
+    expect(hasManualRows(state)).toBe(false);
   });
-});
 
-describe("applyPreset with array", () => {
-  const descriptorWithArrayPreset: FilterDescriptor = {
-    columns: [
-      {
-        key: "company",
-        label: "Company",
-        type: "string",
-        conditions: [
-          { key: "is_in", label: "is in" },
-          { key: "is_not_in", label: "is not in" },
-        ],
-        values: [
-          { value: "netflix", label: "Netflix" },
-          { value: "google", label: "Google" },
-        ],
-        presets: [
-          { name: "Big Tech", filter: { company: ["netflix", "google"] } },
-        ],
-      },
-    ],
-  };
+  it("is true when a manual row is complete", () => {
+    let state = createInitialState();
+    state = addRow(state);
+    state = setRowField(state, 0, "age");
+    state = setRowCondition(state, 0, "equals");
+    state = setRowValue(state, 0, 22);
 
-  it("applies array preset as is_in condition", () => {
-    const state = createInitialState();
-    const next = applyPreset(
-      state,
-      descriptorWithArrayPreset,
-      "company",
-      "Big Tech",
-    );
+    expect(hasManualRows(state)).toBe(true);
+  });
 
-    const presetRow = next.rows[0];
+  it("is true with addWithField and completed row", () => {
+    let state = createInitialState();
+    state = addRowWithField(state, "age");
+    state = setRowCondition(state, 0, "equals");
+    state = setRowValue(state, 0, 22);
 
-    expect(presetRow.field).toBe("company");
-    expect(presetRow.condition).toBe("is_in");
-    expect(presetRow.value).toEqual(["netflix", "google"]);
+    expect(hasManualRows(state)).toBe(true);
+  });
+
+  it("is false after clear", () => {
+    let state = createInitialState();
+    state = addRow(state);
+    state = setRowField(state, 0, "age");
+    state = setRowCondition(state, 0, "equals");
+    state = setRowValue(state, 0, 22);
+    state = clearState();
+
+    expect(hasManualRows(state)).toBe(false);
+  });
+
+  it("is false after removing the only manual row", () => {
+    let state = createInitialState();
+    state = addRow(state);
+    state = setRowField(state, 0, "age");
+    state = setRowCondition(state, 0, "equals");
+    state = setRowValue(state, 0, 22);
+    state = removeRow(state, 0);
+
+    expect(hasManualRows(state)).toBe(false);
+  });
+
+  it("rows added via restoreRows are not manual", () => {
+    const state = restoreRows([
+      { field: "age", condition: "equals", value: 22 },
+    ]);
+
+    expect(state.rows.length).toBe(1);
+    expect(state.rows[0].field).toBe("age");
+    expect(hasManualRows(state)).toBe(false);
+  });
+
+  it("manual rows added after restoreRows are tracked", () => {
+    let state = restoreRows([{ field: "age", condition: "equals", value: 22 }]);
+    state = addRow(state);
+    state = setRowField(state, 1, "name");
+    state = setRowCondition(state, 1, "equals");
+    state = setRowValue(state, 1, "Alice");
+
+    expect(hasManualRows(state)).toBe(true);
   });
 });
 

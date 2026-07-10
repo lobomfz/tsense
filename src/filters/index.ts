@@ -1,9 +1,10 @@
+export { isRelativeDate, resolveRelativeDate } from "./relative-dates.js";
 export { deserializeFilter, serializeFilter } from "./url.js";
-import type { Type } from "arktype";
 import { type } from "arktype";
+import type { Type } from "arktype";
 import type { TsenseFieldType } from "../env.js";
 import type { TSense } from "../tsense.js";
-import type { FilterFor, SearchInput } from "../types.js";
+import type { FilterFor, SearchInput, TsenseSchema } from "../types.js";
 
 export type FilterDescriptor<T = Record<string, unknown>> = {
   infer: FilterFor<T>;
@@ -13,14 +14,12 @@ export type FilterDescriptor<T = Record<string, unknown>> = {
     type: "string" | "number" | "boolean" | "date";
     conditions: { key: string; label: string }[];
     values?: { value: string; label: string }[];
-    presets?: { name: string; filter: Record<string, unknown> }[];
   }[];
 };
 
-type FilterBuilderFieldConfig<T> = {
+type FilterBuilderFieldConfig = {
   label: string;
   labels?: Record<string, string>;
-  presets?: Record<string, FilterFor<T> | (() => FilterFor<T>)>;
 };
 
 type FilterBuilderReturn<T> = {
@@ -82,9 +81,9 @@ type FilterBuilderOptions = {
   >;
 };
 
-export function createFilterBuilder<T extends Type>(
+export function createFilterBuilder<T extends TsenseSchema>(
   collection: TSense<T>,
-  config: { [K in keyof T["infer"]]?: FilterBuilderFieldConfig<T["infer"]> },
+  config: { [K in keyof T["infer"]]?: FilterBuilderFieldConfig },
   options?: FilterBuilderOptions,
 ): FilterBuilderReturn<T["infer"]> {
   const fields = collection.fields;
@@ -105,7 +104,15 @@ export function createFilterBuilder<T extends Type>(
         "notIn?": "string[]",
       });
 
-      const dateInput = "number | string | Date";
+      const relativeDateUnit = "'day' | 'week' | 'month'";
+
+      const relativeDate = type
+        .raw({ startOf: relativeDateUnit })
+        .or(type.raw({ endOf: relativeDateUnit }));
+
+      const concreteDateInput = type.raw("number | string | Date");
+      const dateInput = concreteDateInput.or(relativeDate);
+      const dateArrayInput = dateInput.array();
 
       const dateOps = type.raw({
         "not?": dateInput,
@@ -113,17 +120,14 @@ export function createFilterBuilder<T extends Type>(
         "gte?": dateInput,
         "lt?": dateInput,
         "lte?": dateInput,
-        "notIn?": `(${dateInput})[]`,
+        "notIn?": dateArrayInput,
       });
 
       const fieldSchemas: Record<ColumnType, unknown> = {
         number: type.raw("number").or(type.raw("number[]")).or(numberOps),
         string: type.raw("string").or(type.raw("string[]")).or(stringOps),
         boolean: type.raw("boolean"),
-        date: type
-          .raw(dateInput)
-          .or(type.raw(`(${dateInput})[]`))
-          .or(dateOps),
+        date: dateInput.or(dateArrayInput).or(dateOps),
       };
 
       const descriptor = this.describe();
@@ -164,10 +168,7 @@ export function createFilterBuilder<T extends Type>(
 
       for (const field of fields) {
         const fieldConfig = (
-          config as Record<
-            string,
-            FilterBuilderFieldConfig<T["infer"]> | undefined
-          >
+          config as Record<string, FilterBuilderFieldConfig | undefined>
         )[field.name];
 
         if (!fieldConfig) continue;
@@ -192,17 +193,6 @@ export function createFilterBuilder<T extends Type>(
             label: fieldConfig.labels?.[v] ?? v,
           }));
           column.conditions = withLabels(enumConditions, "enum");
-        }
-
-        if (fieldConfig.presets) {
-          column.presets = Object.entries(fieldConfig.presets).map(
-            ([name, filterOrFn]) => ({
-              name,
-              filter: (typeof filterOrFn === "function"
-                ? filterOrFn()
-                : filterOrFn) as Record<string, unknown>,
-            }),
-          );
         }
 
         columns.push(column);

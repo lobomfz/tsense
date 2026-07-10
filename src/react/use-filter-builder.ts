@@ -2,13 +2,14 @@ import { useMemo, useState } from "react";
 import {
   addRow,
   addRowWithField,
-  applyPreset as applyPresetState,
   buildResult,
   clearState,
   columnFor,
   conditionsFor,
   createInitialState,
+  hasManualRows as hasManualRowsState,
   removeRow,
+  restoreRows,
   setRowCondition,
   setRowField,
   setRowValue,
@@ -18,11 +19,10 @@ import {
 } from "../filters/filter-state.js";
 import type { FilterDescriptor } from "../filters/index.js";
 
-type Preset = { field: string; name: string };
-
 type UseFilterBuilderReturn = {
   columns: FilterDescriptor["columns"];
   rows: FilterRow[];
+  hasManualRows: boolean;
   add: () => void;
   addWithField: (field: string) => void;
   remove: (index: number) => void;
@@ -30,12 +30,11 @@ type UseFilterBuilderReturn = {
   setCondition: (index: number, condition: string) => void;
   setValue: (index: number, value: FilterValue) => void;
   clear: () => void;
+  restore: (rows: Omit<FilterRow, "id">[]) => void;
   conditionsFor: (
     field: string,
   ) => FilterDescriptor["columns"][number]["conditions"];
   columnFor: (field: string) => FilterDescriptor["columns"][number];
-  presets: Preset[];
-  applyPreset: (field: string, name: string) => void;
   result: Record<string, unknown>;
 };
 
@@ -44,19 +43,12 @@ export function useFilterBuilder<T>(
 ): UseFilterBuilderReturn {
   const [state, setState] = useState<FilterState>(createInitialState);
 
-  const presets = useMemo(
-    () =>
-      descriptor.columns.flatMap((col) =>
-        (col.presets ?? []).map((p) => ({ field: col.key, name: p.name })),
-      ),
-    [descriptor],
-  );
-
   const result = useMemo(() => buildResult(state), [state]);
 
   return {
     columns: descriptor.columns,
     rows: state.rows,
+    hasManualRows: hasManualRowsState(state),
     add: () => setState(addRow),
     addWithField: (field: string) => setState((s) => addRowWithField(s, field)),
     remove: (index: number) => setState((s) => removeRow(s, index)),
@@ -67,11 +59,10 @@ export function useFilterBuilder<T>(
     setValue: (index: number, value: FilterValue) =>
       setState((s) => setRowValue(s, index, value)),
     clear: () => setState(clearState),
+    restore: (rows: Omit<FilterRow, "id">[]) =>
+      setState(() => restoreRows(rows)),
     conditionsFor: (field: string) => conditionsFor(descriptor, field),
     columnFor: (field: string) => columnFor(descriptor, field),
-    presets,
-    applyPreset: (field: string, name: string) =>
-      setState((s) => applyPresetState(s, descriptor, field, name)),
     result,
   };
 }

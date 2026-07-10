@@ -113,6 +113,32 @@ describe("syncData", () => {
     expect(count).toBe(2);
   });
 
+  it("deletes requested ids missing from the source", async () => {
+    let sourceData: Item[] = [{ id: "1", name: "Alice", age: 30 }];
+
+    const collection = new TSense({
+      name: collectionName,
+      schema,
+      connection,
+      defaultSearchField: "name",
+      dataSync: {
+        getAllIds: async () => sourceData.map((item) => item.id!),
+        getItems: async (ids) =>
+          sourceData.filter((item) => ids.includes(item.id!)),
+      },
+    });
+
+    await collection.create();
+    await collection.syncData();
+
+    sourceData = [];
+
+    const result = await collection.syncData({ ids: ["1"] });
+
+    expect(result.deleted).toBe(1);
+    expect(await collection.get("1")).toBeNull();
+  });
+
   it("purges orphan documents", async () => {
     const collection = new TSense({
       name: collectionName,
