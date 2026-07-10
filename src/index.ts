@@ -31,6 +31,7 @@ export type {
   SearchOptionsWithOmit,
   SearchOptionsWithPick,
   SearchResult,
+  SchemaInspection,
   StringFilter,
   SyncConfig,
   SyncOptions,

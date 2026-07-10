@@ -215,6 +215,17 @@ export type CollectionInfo = {
   enable_nested_fields?: boolean;
 };
 
+export type SchemaInspection =
+  | { status: "missing" }
+  | { status: "in_sync" }
+  | {
+      status: "drift";
+      add: FieldSchema[];
+      remove: FieldSchema[];
+      modify: FieldSchema[];
+      defaultSortingFieldChanged: boolean;
+    };
+
 export type Synonym = {
   root?: string;
   synonyms: string[];

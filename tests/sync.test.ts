@@ -83,6 +83,69 @@ describe("sync", () => {
     expect(remote).not.toBeNull();
   });
 
+  it("inspects missing, synchronized, and drifted schemas", async () => {
+    const initialSchema = type({
+      "id?": "string",
+      name: type("string").configure({ sort: true }),
+      count: type("number.integer").configure({
+        type: "int32",
+        facet: false,
+      }),
+      legacy: "string",
+    });
+
+    const initialCollection = new TSense({
+      name: collectionName,
+      schema: initialSchema,
+      connection,
+      defaultSearchField: "name",
+      defaultSortingField: "name",
+    });
+
+    expect(await initialCollection.inspectSchema()).toEqual({
+      status: "missing",
+    });
+
+    await initialCollection.syncSchema();
+
+    expect(await initialCollection.inspectSchema()).toEqual({
+      status: "in_sync",
+    });
+
+    const updatedSchema = type({
+      "id?": "string",
+      name: type("string").configure({ sort: true }),
+      count: type("number.integer").configure({
+        type: "int32",
+        facet: true,
+      }),
+      email: "string",
+      age: "number.integer",
+    });
+
+    const updatedCollection = new TSense({
+      name: collectionName,
+      schema: updatedSchema,
+      connection,
+      defaultSearchField: "name",
+      defaultSortingField: "age",
+    });
+    const inspection = await updatedCollection.inspectSchema();
+
+    expect(inspection.status).toBe("drift");
+    if (inspection.status !== "drift") {
+      throw new Error("EXPECTED_SCHEMA_DRIFT");
+    }
+
+    expect(inspection.add.map((field) => field.name).toSorted()).toEqual([
+      "age",
+      "email",
+    ]);
+    expect(inspection.remove.map((field) => field.name)).toEqual(["legacy"]);
+    expect(inspection.modify.map((field) => field.name)).toEqual(["count"]);
+    expect(inspection.defaultSortingFieldChanged).toBe(true);
+  });
+
   it("patches schema when fields are added", async () => {
     const initialSchema = type({
       "id?": "string",

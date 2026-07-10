@@ -1,5 +1,5 @@
 import type { AxiosInstance } from "./tsense.js";
-import type { FieldSchema } from "./types.js";
+import type { FieldSchema, SchemaInspection } from "./types.js";
 
 type SchemaDiff = {
   toAdd: FieldSchema[];
@@ -35,28 +35,56 @@ export class TSenseMigrator {
   ) {}
 
   async sync(): Promise<void> {
-    const exists = await this.exists();
+    const inspection = await this.inspect();
 
-    if (!exists) {
+    if (inspection.status === "missing") {
       return await this.create();
     }
 
-    const remote = await this.getRemote();
-
-    if (
-      (remote.default_sorting_field || undefined) !==
-      (this.defaultSortingField ?? undefined)
-    ) {
-      throw new Error("SCHEMA_RECREATE_REQUIRED");
-    }
-
-    const diff = this.diff(remote.fields);
-
-    if (!diff.toAdd.length && !diff.toRemove.length && !diff.toModify.length) {
+    if (inspection.status === "in_sync") {
       return;
     }
 
-    await this.patch(diff);
+    if (inspection.defaultSortingFieldChanged) {
+      throw new Error("SCHEMA_RECREATE_REQUIRED");
+    }
+
+    await this.patch({
+      toAdd: inspection.add,
+      toRemove: inspection.remove,
+      toModify: inspection.modify,
+    });
+  }
+
+  async inspect(): Promise<SchemaInspection> {
+    const exists = await this.exists();
+
+    if (!exists) {
+      return { status: "missing" };
+    }
+
+    const remote = await this.getRemote();
+    const diff = this.diff(remote.fields);
+    const defaultSortingFieldChanged =
+      (remote.default_sorting_field || undefined) !==
+      (this.defaultSortingField ?? undefined);
+
+    if (
+      !defaultSortingFieldChanged &&
+      !diff.toAdd.length &&
+      !diff.toRemove.length &&
+      !diff.toModify.length
+    ) {
+      return { status: "in_sync" };
+    }
+
+    return {
+      status: "drift",
+      add: diff.toAdd,
+      remove: diff.toRemove,
+      modify: diff.toModify,
+      defaultSortingFieldChanged,
+    };
   }
 
   private async exists(): Promise<boolean> {

@@ -24,6 +24,7 @@ import type {
   SearchOptionsWithOmit,
   SearchOptionsWithPick,
   SearchResult,
+  SchemaInspection,
   SyncConfig,
   SyncOptions,
   SyncResult,
@@ -283,6 +284,15 @@ export class TSense<T extends TsenseSchema> {
 
   async syncSchema(): Promise<void> {
     await this.ensureSynced(true);
+  }
+
+  async inspectSchema(): Promise<SchemaInspection> {
+    return await new TSenseMigrator(
+      this.options.name,
+      this.fields,
+      this.options.defaultSortingField as string | undefined,
+      this.axios,
+    ).inspect();
   }
 
   async retrieve(): Promise<CollectionInfo | null> {
