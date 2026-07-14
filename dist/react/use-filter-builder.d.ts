@@ -1,0 +1,20 @@
+import { type FilterRow, type FilterValue } from "../filters/filter-state.js";
+import type { FilterDescriptor } from "../filters/index.js";
+type UseFilterBuilderReturn = {
+    columns: FilterDescriptor["columns"];
+    rows: FilterRow[];
+    hasManualRows: boolean;
+    add: () => void;
+    addWithField: (field: string) => void;
+    remove: (index: number) => void;
+    setField: (index: number, field: string) => void;
+    setCondition: (index: number, condition: string) => void;
+    setValue: (index: number, value: FilterValue) => void;
+    clear: () => void;
+    restore: (rows: Omit<FilterRow, "id">[]) => void;
+    conditionsFor: (field: string) => FilterDescriptor["columns"][number]["conditions"];
+    columnFor: (field: string) => FilterDescriptor["columns"][number];
+    result: Record<string, unknown>;
+};
+export declare function useFilterBuilder<T>(descriptor: FilterDescriptor<T>): UseFilterBuilderReturn;
+export {};
