@@ -39,6 +39,7 @@
     "test": "bun test",
     "format": "oxfmt check --write src tests",
     "check-exports": "attw --pack . --ignore-rules cjs-resolves-to-esm no-resolution",
+    "prepare": "bun run build",
     "local-release": "changeset version && changeset publish",
     "prepublishOnly": "bun run ci"
   },
