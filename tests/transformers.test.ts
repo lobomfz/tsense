@@ -239,3 +239,55 @@ describe("custom transformers", () => {
     expect(CustomCollection).toBeDefined();
   });
 });
+
+describe("primitive unions", () => {
+  it("infers nullish primitive unions as optional primitive fields", () => {
+    const schema = type({
+      nullableBoolean: "boolean | null",
+      nullableDate: "Date | null",
+      nullableInteger: "number.integer | null",
+      nullableNumber: "number | null",
+      optionalBoolean: "boolean | undefined",
+      optionalString: "string | undefined",
+    });
+
+    const collection = new TSense({
+      name: "primitive_unions_test",
+      schema,
+      connection,
+    });
+
+    expect(collection.fields).toEqual([
+      expect.objectContaining({
+        name: "nullableBoolean",
+        type: "bool",
+        optional: true,
+      }),
+      expect.objectContaining({
+        name: "nullableDate",
+        type: "int64",
+        optional: true,
+      }),
+      expect.objectContaining({
+        name: "nullableInteger",
+        type: "int64",
+        optional: true,
+      }),
+      expect.objectContaining({
+        name: "nullableNumber",
+        type: "float",
+        optional: true,
+      }),
+      expect.objectContaining({
+        name: "optionalBoolean",
+        type: "bool",
+        optional: true,
+      }),
+      expect.objectContaining({
+        name: "optionalString",
+        type: "string",
+        optional: true,
+      }),
+    ]);
+  });
+});

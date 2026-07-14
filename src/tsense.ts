@@ -78,6 +78,12 @@ const arkToTsense: Record<string, TsenseFieldMeta["type"]> = {
   "boolean[]": "bool[]",
 };
 
+interface ArkBranch {
+  domain?: string;
+  meta?: unknown;
+  unit?: unknown;
+}
+
 export type AxiosInstance = ReturnType<typeof redaxiosInstance.create>;
 
 export class TSense<T extends TsenseSchema> {
@@ -111,13 +117,33 @@ export class TSense<T extends TsenseSchema> {
 
   private getBaseType(expression: string, domain?: string): string {
     if (domain && domain !== "undefined") return domain;
-    return expression.replace(/ \| undefined$/, "");
+
+    return expression
+      .split(" | ")
+      .filter((branch) => branch !== "null" && branch !== "undefined")
+      .join(" | ");
   }
 
-  private inferType(arkType: string): TsenseFieldType {
+  private inferType(arkType: string, branches: ArkBranch[]): TsenseFieldType {
     const direct = arkToTsense[arkType];
 
     if (direct) return direct;
+
+    const domains = new Set(
+      branches
+        .map((branch) => branch.domain)
+        .filter(
+          (domain) => domain && domain !== "null" && domain !== "undefined",
+        ),
+    );
+
+    if (domains.size === 1) {
+      const domain = domains.values().next().value;
+      const inferred = domain ? arkToTsense[domain] : undefined;
+
+      if (inferred) return inferred;
+    }
+
     if (arkType.includes("[]")) {
       if (arkType.includes("'") || arkType.includes('"')) {
         return "string[]";
@@ -206,7 +232,7 @@ export class TSense<T extends TsenseSchema> {
             expression: string;
             domain?: string;
             meta?: unknown;
-            branches?: { domain?: string; meta?: unknown; unit?: unknown }[];
+            branches?: ArkBranch[];
           };
         }[];
       };
@@ -232,6 +258,11 @@ export class TSense<T extends TsenseSchema> {
       const expression = String(prop.value.expression);
       const domain = prop.value.domain;
       const baseType = this.getBaseType(expression, domain);
+      const optional =
+        prop.kind === "optional" ||
+        branches.some(
+          (branch) => branch.domain === "null" || branch.domain === "undefined",
+        );
 
       const transformer = transformers.find(
         (t) => t.match(expression, domain) || t.match(baseType, domain),
@@ -243,7 +274,7 @@ export class TSense<T extends TsenseSchema> {
           name: prop.key,
           type: transformer.storageType,
           sourceExpression: expression,
-          optional: prop.kind === "optional",
+          optional,
           facet: meta?.facet,
           sort: meta?.sort,
           index: meta?.index,
@@ -252,13 +283,13 @@ export class TSense<T extends TsenseSchema> {
         continue;
       }
 
-      const type = meta?.type ?? this.inferType(baseType);
+      const type = meta?.type ?? this.inferType(baseType, branches);
 
       fields.push({
         name: prop.key,
         type,
         sourceExpression: expression,
-        optional: prop.kind === "optional",
+        optional,
         facet: meta?.facet,
         sort: meta?.sort,
         index: meta?.index,
